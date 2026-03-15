@@ -4,8 +4,21 @@ import { useState, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
-import { Phone, User, Stethoscope, Upload, LogIn, UserPlus, CheckCircle } from 'lucide-react'
-import { isDemoPhone, getDemoAccount, DEMO_PASSWORD, formatPhone } from '@/lib/demoAccounts'
+import { User, Stethoscope, Upload, LogIn, UserPlus, CheckCircle } from 'lucide-react'
+import { formatPhone } from '@/lib/demoAccounts'
+
+const DEMO_ACCOUNTS: Record<string, { name: string; role: string; email: string; password: string }> = {
+  '+963999999999': { name: 'Admin Test',    role: 'admin',   email: 'admin@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963988888888': { name: 'د. أحمد محمد', role: 'doctor',  email: 'ahmad@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963977777777': { name: 'Patient Demo',  role: 'patient', email: 'patient@demo.tabibak.local', password: 'Demo@TabibakX9!' },
+  '+963966666666': { name: 'د. سارة علي',  role: 'doctor',  email: 'sara@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+  '+963955555555': { name: 'د. علي حسن',   role: 'doctor',  email: 'ali@demo.tabibak.local',     password: 'Demo@TabibakX9!' },
+  '+963944444444': { name: 'د. ليلى كريم', role: 'doctor',  email: 'layla@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963933333333': { name: 'د. عمر يوسف',  role: 'doctor',  email: 'omar@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+  '+963922222222': { name: 'د. هاني سعد',  role: 'doctor',  email: 'hani@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+}
+
+const getDemoAccount = (phone: string) => DEMO_ACCOUNTS[phone] || null
 
 interface AuthModalProps {
   open: boolean
@@ -60,7 +73,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     return true
   }
 
-  const handleSendOTP = async () => {
+  const handleSendOTP = () => {
     if (!isLoginMode && pendingRole === 'doctor') {
       if (!validateDoctorFields()) return
     } else if (!isLoginMode && (!phone || !fullName)) {
@@ -72,25 +85,8 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     if (!validatePhone(phone)) {
       toast({ title: 'خطأ', description: 'يرجى إدخال رقم هاتف سوري صحيح (09XXXXXXXX)', variant: 'destructive' }); return
     }
-
-    setLoading(true)
-    try {
-      const formattedPhone = formatPhone(phone)
-      if (isDemoPhone(formattedPhone) || /^\+963\d{9}$/.test(formattedPhone)) {
-        setStep('otp')
-        toast({ title: 'رمز التحقق', description: 'أدخل الرمز: 123456' })
-        setLoading(false)
-        return
-      }
-      const { error } = await supabase.auth.signInWithOtp({ phone: formattedPhone })
-      if (error) throw error
-      setStep('otp')
-      toast({ title: 'تم إرسال رمز التحقق', description: `تم إرسال الرمز إلى ${formattedPhone}` })
-    } catch (err: any) {
-      toast({ title: 'خطأ', description: err.message, variant: 'destructive' })
-    } finally {
-      setLoading(false)
-    }
+    setStep('otp')
+    toast({ title: 'رمز التحقق', description: 'أدخل الرمز: 123456' })
   }
 
   const uploadFile = async (file: File, bucket: string, path: string) => {
@@ -101,140 +97,90 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
   }
 
   const handleVerifyOTP = async () => {
+    if (otp !== '123456') {
+      toast({ title: 'خطأ', description: 'رمز التحقق غير صحيح', variant: 'destructive' }); return
+    }
+
     setLoading(true)
     try {
       const formattedPhone = formatPhone(phone)
 
-      if (otp === '123456' && /^\+963\d{9}$/.test(formattedPhone)) {
-        // Doctor registration → send request, wait for admin approval
-        if (!isLoginMode && pendingRole === 'doctor') {
-          let avatarUrl: string | null = null
-          let certUrl: string | null = null
-          const uniqueId = crypto.randomUUID()
-          if (avatarFile) {
-            const ext = avatarFile.name.split('.').pop()
-            avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${uniqueId}.${ext}`)
-          }
-          if (certificateFile) {
-            const ext = certificateFile.name.split('.').pop()
-            certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${uniqueId}.${ext}`)
-          }
-          await supabase.from('doctor_requests').insert({
-            full_name: fullName, specialization, phone: formattedPhone,
-            city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
-          })
-          setStep('doctor-success')
-          setLoading(false)
-          return
+      if (!isLoginMode && pendingRole === 'doctor') {
+        let avatarUrl: string | null = null
+        let certUrl: string | null = null
+        const uniqueId = crypto.randomUUID()
+        if (avatarFile) {
+          const ext = avatarFile.name.split('.').pop()
+          avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${uniqueId}.${ext}`)
         }
-
-        // Patient registration
-        if (!isLoginMode && pendingRole === 'patient') {
-          const demoAcc = getDemoAccount(formattedPhone)
-          if (demoAcc) {
-            const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: DEMO_PASSWORD })
-            if (error) throw error
-            toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName}` })
-            onClose(); resetForm(); setLoading(false); return
-          }
-          toast({ title: 'خطأ', description: 'استخدم رقم 0977777777 للحساب التجريبي للمريض', variant: 'destructive' })
-          setLoading(false); return
+        if (certificateFile) {
+          const ext = certificateFile.name.split('.').pop()
+          certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${uniqueId}.${ext}`)
         }
+        await supabase.from('doctor_requests').insert({
+          full_name: fullName, specialization, phone: formattedPhone,
+          city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
+        })
+        setStep('doctor-success')
+        setLoading(false)
+        return
+      }
 
-        // Login mode
-        if (isLoginMode) {
-          // Check for pending/rejected doctor request
-          const { data: requestData } = await supabase
-            .from('doctor_requests').select('status')
-            .eq('phone', formattedPhone)
-            .order('created_at', { ascending: false }).limit(1).single()
-
-          if (requestData?.status === 'pending') {
-            toast({ title: 'طلبك قيد المراجعة', description: 'طلبك قيد المراجعة من قبل الإدارة', variant: 'destructive' })
-            setLoading(false); return
-          }
-          if (requestData?.status === 'rejected') {
-            toast({ title: 'تم رفض الطلب', description: 'تم رفض طلب تسجيلك. يرجى التواصل مع الإدارة.', variant: 'destructive' })
-            setLoading(false); return
-          }
-
-          // Try demo account
-          const demoAcc = getDemoAccount(formattedPhone)
-          if (demoAcc) {
-            if (demoAcc.role === 'doctor') {
-              const { data: doctorData } = await supabase.from('doctors').select('is_approved').eq('phone', formattedPhone).single()
-              if (!doctorData || !doctorData.is_approved) {
-                toast({ title: 'طلبك قيد المراجعة', description: 'طلبك قيد المراجعة من قبل الإدارة', variant: 'destructive' })
-                setLoading(false); return
-              }
-            }
-            const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: DEMO_PASSWORD })
-            if (error) throw error
-            toast({ title: 'مرحباً!', description: `أهلاً بك ${demoAcc.name}` })
-            onClose(); resetForm(); setLoading(false); return
-          }
-
-          // Approved doctor login
-          const { data: doctorData } = await supabase
-            .from('doctors').select('is_approved, user_id, full_name')
-            .eq('phone', formattedPhone).eq('is_approved', true).single()
-          if (doctorData?.user_id) {
-            const email = `doctor_${formattedPhone.replace('+', '')}@tabibak.local`
-            const { error } = await supabase.auth.signInWithPassword({ email, password: 'Doctor@Tabibak2024!' })
-            if (error) {
-              toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول. يرجى المحاولة لاحقاً.', variant: 'destructive' })
-              setLoading(false); return
-            }
-            toast({ title: 'مرحباً!', description: `أهلاً بك ${doctorData.full_name}` })
-            onClose(); resetForm(); setLoading(false); return
-          }
-
-          toast({ title: 'خطأ', description: 'لا يوجد حساب بهذا الرقم', variant: 'destructive' })
-          setLoading(false); return
+      if (!isLoginMode && pendingRole === 'patient') {
+        const demoAcc = getDemoAccount(formattedPhone)
+        if (demoAcc) {
+          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
+          if (error) throw error
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName || demoAcc.name}` })
+          onClose(); resetForm(); return
         }
-      } else if (isDemoPhone(formattedPhone) || /^\+963\d{9}$/.test(formattedPhone)) {
-        toast({ title: 'خطأ', description: 'رمز التحقق غير صحيح', variant: 'destructive' })
+        toast({ title: 'خطأ', description: 'استخدم رقم 0977777777 للحساب التجريبي للمريض', variant: 'destructive' })
         setLoading(false); return
       }
 
-      // Real OTP verification
-      const { data, error } = await supabase.auth.verifyOtp({ phone: formattedPhone, token: otp, type: 'sms' })
-      if (error) throw error
-      const userId = data.user?.id
-      if (!userId) throw new Error('لم يتم العثور على المستخدم')
+      if (isLoginMode) {
+        const demoAcc = getDemoAccount(formattedPhone)
+        if (demoAcc) {
+          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
+          if (error) {
+            toast({ title: 'خطأ', description: 'يرجى تشغيل seed-demo من Supabase لتفعيل الحسابات التجريبية', variant: 'destructive' })
+            setLoading(false); return
+          }
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${demoAcc.name}` })
+          onClose(); resetForm(); return
+        }
 
-      if (!isLoginMode) {
-        await supabase.from('profiles').upsert({ user_id: userId, full_name: fullName, phone: formattedPhone })
-        if (pendingRole === 'doctor') {
-          let avatarUrl: string | null = null
-          let certUrl: string | null = null
-          if (avatarFile) {
-            const ext = avatarFile.name.split('.').pop()
-            avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${userId}.${ext}`)
+        const { data: doctorData } = await supabase
+          .from('doctors').select('is_approved, user_id, full_name')
+          .eq('phone', formattedPhone).eq('is_approved', true).single()
+        if (doctorData?.user_id) {
+          const email = `doctor_${formattedPhone.replace('+', '')}@tabibak.local`
+          const { error } = await supabase.auth.signInWithPassword({ email, password: 'Doctor@Tabibak2024!' })
+          if (error) {
+            toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول.', variant: 'destructive' })
+            setLoading(false); return
           }
-          if (certificateFile) {
-            const ext = certificateFile.name.split('.').pop()
-            certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${userId}.${ext}`)
-          }
-          await supabase.from('doctor_requests').insert({
-            full_name: fullName, specialization, phone: formattedPhone,
-            city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
-          })
-          setStep('doctor-success'); setLoading(false); return
-        } else {
-          toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName}` })
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${doctorData.full_name}` })
+          onClose(); resetForm(); return
         }
-      } else {
-        const { data: doctorData } = await supabase.from('doctors').select('is_approved').eq('phone', formattedPhone).single()
-        const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', userId)
-        const isDoctorRole = roleData?.some((r: any) => r.role === 'doctor')
-        if (isDoctorRole && (!doctorData || !doctorData.is_approved)) {
+
+        const { data: requestData } = await supabase
+          .from('doctor_requests').select('status')
+          .eq('phone', formattedPhone)
+          .order('created_at', { ascending: false }).limit(1).single()
+        if (requestData?.status === 'pending') {
           toast({ title: 'طلبك قيد المراجعة', description: 'طلبك قيد المراجعة من قبل الإدارة', variant: 'destructive' })
-          await supabase.auth.signOut(); setLoading(false); return
+          setLoading(false); return
         }
-        toast({ title: 'مرحباً!', description: 'تم تسجيل الدخول بنجاح' })
+        if (requestData?.status === 'rejected') {
+          toast({ title: 'تم رفض الطلب', description: 'تم رفض طلبك. يرجى التواصل مع الإدارة.', variant: 'destructive' })
+          setLoading(false); return
+        }
+
+        toast({ title: 'خطأ', description: 'لا يوجد حساب بهذا الرقم', variant: 'destructive' })
+        setLoading(false); return
       }
-      onClose(); resetForm()
+
     } catch (err: any) {
       toast({ title: 'خطأ في التحقق', description: err.message, variant: 'destructive' })
     } finally {
@@ -280,8 +226,8 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
                 <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
                 <p className="font-body text-xs text-muted-foreground mt-1">صيغة سورية: 09XXXXXXXX</p>
               </div>
-              <button onClick={handleSendOTP} disabled={loading || !phone} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-                {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+              <button onClick={handleSendOTP} disabled={!phone} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                إرسال رمز التحقق
               </button>
               <button onClick={() => setStep('choose-action')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
             </div>
@@ -317,8 +263,8 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
                 <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
                 <p className="font-body text-xs text-muted-foreground mt-1">صيغة سورية: 09XXXXXXXX</p>
               </div>
-              <button onClick={handleSendOTP} disabled={loading || !phone || !fullName} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-                {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+              <button onClick={handleSendOTP} disabled={!phone || !fullName} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                إرسال رمز التحقق
               </button>
               <button onClick={() => setStep('choose-role')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
             </div>
@@ -367,8 +313,8 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
                   {certificateFile ? <><CheckCircle className="w-5 h-5 text-green-600" /><span className="text-sm truncate">{certificateFile.name}</span></> : <><Upload className="w-5 h-5 text-muted-foreground" /><span className="text-muted-foreground text-sm">رفع الشهادة</span></>}
                 </button>
               </div>
-              <button onClick={handleSendOTP} disabled={loading || !isDoctorFormValid} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-                {loading ? 'جاري الإرسال...' : 'إرسال رمز التحقق'}
+              <button onClick={handleSendOTP} disabled={!isDoctorFormValid} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                إرسال رمز التحقق
               </button>
               <button onClick={() => setStep('choose-role')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
             </div>
@@ -378,7 +324,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         {step === 'otp' && (
           <>
             <DialogHeader><DialogTitle className="font-heading text-xl text-center">رمز التحقق</DialogTitle></DialogHeader>
-            <p className="font-body text-sm text-muted-foreground text-center">أدخل رمز التحقق المرسل إلى هاتفك</p>
+            <p className="font-body text-sm text-muted-foreground text-center">أدخل الرمز: <strong>123456</strong></p>
             <div className="space-y-4">
               <input className="premium-input text-center text-2xl tracking-[0.5em]" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} dir="ltr" />
               <button onClick={handleVerifyOTP} disabled={loading || otp.length < 6} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
