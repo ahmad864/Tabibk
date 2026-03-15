@@ -1,0 +1,1 @@
+ALTER TABLE public.doctors ADD COLUMN is_featured boolean DEFAULT false;

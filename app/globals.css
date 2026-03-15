@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 213 55% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 213 55% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 55% 18%;
+    --primary: 209 100% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 55% 18%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 213 20% 46%;
+    --accent: 209 80% 95%;
+    --accent-foreground: 209 100% 31%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 30% 90%;
+    --input: 210 30% 90%;
+    --ring: 209 100% 31%;
+    --radius: 0.75rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 209 100% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 213 55% 18%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 209 100% 31%;
+    --hero-gradient: linear-gradient(135deg, hsl(209 100% 31%), hsl(213 55% 18%));
+    --card-shadow: 0 4px 24px -4px hsl(209 100% 31% / 0.1);
+    --card-shadow-hover: 0 8px 32px -4px hsl(209 100% 31% / 0.18);
+    --font-heading: 'Cairo', sans-serif;
+    --font-body: 'Tajawal', sans-serif;
+  }
+
+  .dark {
+    --background: 213 55% 8%;
+    --foreground: 210 40% 96%;
+    --card: 213 55% 12%;
+    --card-foreground: 210 40% 96%;
+    --popover: 213 55% 12%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 209 100% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 55% 22%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 213 30% 18%;
+    --muted-foreground: 210 20% 65%;
+    --accent: 209 50% 20%;
+    --accent-foreground: 209 100% 70%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 213 30% 22%;
+    --input: 213 30% 22%;
+    --ring: 209 100% 45%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { direction: rtl; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
+}
+
+@layer components {
+  .font-heading { font-family: var(--font-heading) !important; }
+  .font-body { font-family: var(--font-body) !important; }
+
+  .premium-input {
+    @apply w-full rounded-xl border border-input bg-background px-4 py-3 text-sm shadow-md transition-all duration-300 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:shadow-lg;
+    @apply placeholder:text-muted-foreground/60;
+    font-family: var(--font-body);
+  }
+
+  .premium-card {
+    @apply rounded-2xl bg-card p-6 transition-all duration-300 ease-in-out;
+    box-shadow: var(--card-shadow);
+  }
+  .premium-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-4px);
+  }
+
+  .hero-gradient { background: var(--hero-gradient); }
+  .section-padding { @apply py-16 md:py-24 px-4; }
+}
