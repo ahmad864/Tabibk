@@ -6,19 +6,7 @@ import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import { User, Stethoscope, Upload, LogIn, UserPlus, CheckCircle } from 'lucide-react'
 import { formatPhone } from '@/lib/demoAccounts'
-
-const DEMO_ACCOUNTS: Record<string, { name: string; role: string; email: string; password: string }> = {
-  '+963999999999': { name: 'Admin Test',    role: 'admin',   email: 'admin@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
-  '+963988888888': { name: 'د. أحمد محمد', role: 'doctor',  email: 'ahmad@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
-  '+963977777777': { name: 'Patient Demo',  role: 'patient', email: 'patient@demo.tabibak.local', password: 'Demo@TabibakX9!' },
-  '+963966666666': { name: 'د. سارة علي',  role: 'doctor',  email: 'sara@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
-  '+963955555555': { name: 'د. علي حسن',   role: 'doctor',  email: 'ali@demo.tabibak.local',     password: 'Demo@TabibakX9!' },
-  '+963944444444': { name: 'د. ليلى كريم', role: 'doctor',  email: 'layla@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
-  '+963933333333': { name: 'د. عمر يوسف',  role: 'doctor',  email: 'omar@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
-  '+963922222222': { name: 'د. هاني سعد',  role: 'doctor',  email: 'hani@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
-}
-
-const getDemoAccount = (phone: string) => DEMO_ACCOUNTS[phone] || null
+import { useAuth, DEMO_USERS } from '@/context/auth-context'
 
 interface AuthModalProps {
   open: boolean
@@ -35,6 +23,8 @@ const specializations = [
 type Step = 'choose-action' | 'login' | 'choose-role' | 'patient' | 'doctor' | 'otp' | 'doctor-success'
 
 export default function AuthModal({ open, onClose, defaultRole, defaultMode }: AuthModalProps) {
+  const { demoLogin } = useAuth()
+
   const getInitialStep = (): Step => {
     if (defaultMode === 'login') return 'login'
     if (defaultRole === 'doctor') return 'doctor'
@@ -105,6 +95,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     try {
       const formattedPhone = formatPhone(phone)
 
+      // ---- طبيب جديد يسجل → يرسل طلب وينتظر الموافقة ----
       if (!isLoginMode && pendingRole === 'doctor') {
         let avatarUrl: string | null = null
         let certUrl: string | null = null
@@ -126,30 +117,34 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         return
       }
 
+      // ---- مريض جديد يسجل ----
       if (!isLoginMode && pendingRole === 'patient') {
-        const demoAcc = getDemoAccount(formattedPhone)
-        if (demoAcc) {
-          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
-          if (error) throw error
-          toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName || demoAcc.name}` })
-          onClose(); resetForm(); return
+        // تحقق هل هو حساب تجريبي
+        const demo = DEMO_USERS[formattedPhone]
+        if (demo && demo.role === 'patient') {
+          const success = demoLogin(formattedPhone)
+          if (success) {
+            toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName}` })
+            onClose(); resetForm(); return
+          }
         }
         toast({ title: 'خطأ', description: 'استخدم رقم 0977777777 للحساب التجريبي للمريض', variant: 'destructive' })
         setLoading(false); return
       }
 
+      // ---- تسجيل الدخول ----
       if (isLoginMode) {
-        const demoAcc = getDemoAccount(formattedPhone)
-        if (demoAcc) {
-          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
-          if (error) {
-            toast({ title: 'خطأ', description: 'يرجى تشغيل seed-demo من Supabase لتفعيل الحسابات التجريبية', variant: 'destructive' })
-            setLoading(false); return
+        // أولاً: تحقق هل هو حساب تجريبي → دخول مباشر بدون Supabase
+        const demo = DEMO_USERS[formattedPhone]
+        if (demo) {
+          const success = demoLogin(formattedPhone)
+          if (success) {
+            toast({ title: 'مرحباً!', description: `أهلاً بك ${demo.name}` })
+            onClose(); resetForm(); return
           }
-          toast({ title: 'مرحباً!', description: `أهلاً بك ${demoAcc.name}` })
-          onClose(); resetForm(); return
         }
 
+        // ثانياً: طبيب مقبول من الإدارة (غير تجريبي)
         const { data: doctorData } = await supabase
           .from('doctors').select('is_approved, user_id, full_name')
           .eq('phone', formattedPhone).eq('is_approved', true).single()
@@ -164,6 +159,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
           onClose(); resetForm(); return
         }
 
+        // ثالثاً: تحقق من حالة الطلب
         const { data: requestData } = await supabase
           .from('doctor_requests').select('status')
           .eq('phone', formattedPhone)
