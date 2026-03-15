@@ -2,16 +2,10 @@
 
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import { Shield } from 'lucide-react'
 import { formatPhone } from '@/lib/demoAccounts'
-
-const ADMIN_ACCOUNT = {
-  phone: '+963999999999',
-  email: 'admin@demo.tabibak.local',
-  password: 'Demo@TabibakX9!',
-}
+import { useAuth, DEMO_USERS } from '@/context/auth-context'
 
 interface AdminLoginModalProps {
   open: boolean
@@ -20,6 +14,7 @@ interface AdminLoginModalProps {
 }
 
 export default function AdminLoginModal({ open, onClose, onSuccess }: AdminLoginModalProps) {
+  const { demoLogin } = useAuth()
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
@@ -33,31 +28,32 @@ export default function AdminLoginModal({ open, onClose, onSuccess }: AdminLogin
     toast({ title: 'رمز التحقق', description: 'أدخل الرمز: 123456' })
   }
 
-  const handleVerify = async () => {
+  const handleVerify = () => {
     if (otp !== '123456') {
       toast({ title: 'خطأ', description: 'رمز التحقق غير صحيح', variant: 'destructive' }); return
     }
+
     const formatted = formatPhone(phone)
-    if (formatted !== ADMIN_ACCOUNT.phone) {
-      toast({ title: 'غير مصرح', description: 'هذا الرقم ليس حساب إدارة', variant: 'destructive' }); return
+    const demo = DEMO_USERS[formatted]
+
+    if (!demo) {
+      toast({ title: 'خطأ', description: 'لا يوجد حساب بهذا الرقم', variant: 'destructive' }); return
     }
+
+    if (demo.role !== 'admin') {
+      toast({ title: 'غير مصرح', description: 'هذا الرقم ليس حساب إدارة. رقم الأدمن: 0999999999', variant: 'destructive' }); return
+    }
+
     setLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: ADMIN_ACCOUNT.email,
-        password: ADMIN_ACCOUNT.password,
-      })
-      if (error) {
-        toast({ title: 'خطأ', description: 'يرجى تشغيل seed-demo من Supabase لتفعيل حساب الأدمن', variant: 'destructive' })
-        setLoading(false); return
-      }
+    const success = demoLogin(formatted)
+    setLoading(false)
+
+    if (success) {
       toast({ title: 'مرحباً بك في لوحة الإدارة' })
       onSuccess()
       onClose()
-    } catch (err: any) {
-      toast({ title: 'خطأ', description: err.message, variant: 'destructive' })
-    } finally {
-      setLoading(false)
+    } else {
+      toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول', variant: 'destructive' })
     }
   }
 
