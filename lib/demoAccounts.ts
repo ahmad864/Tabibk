@@ -131,7 +131,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.9, rating_count: 35,
     working_hours_start: '09:00', working_hours_end: '17:00',
     working_days: [0, 1, 2, 3, 4],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=رنا إبراهيم&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=رنا&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-007',
   },
   {
@@ -147,7 +147,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.4, rating_count: 12,
     working_hours_start: '10:00', working_hours_end: '18:00',
     working_days: [0, 1, 2, 3, 4],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=كريم ناصر&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=كريم&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-008',
   },
   {
@@ -163,7 +163,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.6, rating_count: 21,
     working_hours_start: '08:00', working_hours_end: '16:00',
     working_days: [0, 1, 2, 3, 4],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=منى خالد&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=منى&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-009',
   },
   {
@@ -179,7 +179,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.8, rating_count: 29,
     working_hours_start: '09:00', working_hours_end: '15:00',
     working_days: [0, 1, 2, 4],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=طارق سليمان&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=طارق&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-010',
   },
   {
@@ -195,7 +195,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.5, rating_count: 16,
     working_hours_start: '11:00', working_hours_end: '19:00',
     working_days: [1, 2, 3, 4, 6],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=نورا فارس&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=نورا&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-011',
   },
   {
@@ -211,12 +211,11 @@ export const DEMO_DOCTORS: DoctorFull[] = [
     rating: 4.3, rating_count: 11,
     working_hours_start: '08:00', working_hours_end: '14:00',
     working_days: [0, 1, 2, 3, 4],
-    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=بلال عمر&backgroundColor=0055A0&textColor=ffffff',
+    avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=بلال&backgroundColor=0055A0&textColor=ffffff',
     user_id: 'demo-doctor-012',
   },
 ]
 
-// تحويل لبيانات DoctorCard
 export function getDemoCardData() {
   return DEMO_DOCTORS.map((d) => ({
     id: d.id,
