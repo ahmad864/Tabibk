@@ -6,7 +6,21 @@ import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import { User, Stethoscope, Upload, LogIn, UserPlus, CheckCircle } from 'lucide-react'
 import { formatPhone } from '@/lib/demoAccounts'
-import { useAuth, DEMO_USERS } from '@/context/auth-context'
+
+// ===== حسابات تجريبية محلية - تعمل بـ signInWithPassword مباشرة =====
+const DEMO_ACCOUNTS: Record<string, { name: string; role: string; email: string; password: string }> = {
+  '+963999999999': { name: 'Admin Test',    role: 'admin',   email: 'admin@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963988888888': { name: 'د. أحمد محمد', role: 'doctor',  email: 'ahmad@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963977777777': { name: 'Patient Demo',  role: 'patient', email: 'patient@demo.tabibak.local', password: 'Demo@TabibakX9!' },
+  '+963966666666': { name: 'د. سارة علي',  role: 'doctor',  email: 'sara@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+  '+963955555555': { name: 'د. علي حسن',   role: 'doctor',  email: 'ali@demo.tabibak.local',     password: 'Demo@TabibakX9!' },
+  '+963944444444': { name: 'د. ليلى كريم', role: 'doctor',  email: 'layla@demo.tabibak.local',   password: 'Demo@TabibakX9!' },
+  '+963933333333': { name: 'د. عمر يوسف',  role: 'doctor',  email: 'omar@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+  '+963922222222': { name: 'د. هاني سعد',  role: 'doctor',  email: 'hani@demo.tabibak.local',    password: 'Demo@TabibakX9!' },
+}
+
+const isDemoPhone = (phone: string) => phone in DEMO_ACCOUNTS
+const getDemoAccount = (phone: string) => DEMO_ACCOUNTS[phone] || null
 
 interface AuthModalProps {
   open: boolean
@@ -23,8 +37,6 @@ const specializations = [
 type Step = 'choose-action' | 'login' | 'choose-role' | 'patient' | 'doctor' | 'otp' | 'doctor-success'
 
 export default function AuthModal({ open, onClose, defaultRole, defaultMode }: AuthModalProps) {
-  const { demoLogin } = useAuth()
-
   const getInitialStep = (): Step => {
     if (defaultMode === 'login') return 'login'
     if (defaultRole === 'doctor') return 'doctor'
@@ -63,6 +75,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     return true
   }
 
+  // ---- إرسال OTP: يذهب لشاشة OTP مباشرة بدون أي طلب خارجي ----
   const handleSendOTP = () => {
     if (!isLoginMode && pendingRole === 'doctor') {
       if (!validateDoctorFields()) return
@@ -76,7 +89,6 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
       toast({ title: 'خطأ', description: 'يرجى إدخال رقم هاتف سوري صحيح (09XXXXXXXX)', variant: 'destructive' }); return
     }
     setStep('otp')
-    toast({ title: 'رمز التحقق', description: 'أدخل الرمز: 123456' })
   }
 
   const uploadFile = async (file: File, bucket: string, path: string) => {
@@ -86,6 +98,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     return data.publicUrl
   }
 
+  // ---- التحقق من OTP والدخول ----
   const handleVerifyOTP = async () => {
     if (otp !== '123456') {
       toast({ title: 'خطأ', description: 'رمز التحقق غير صحيح', variant: 'destructive' }); return
@@ -95,7 +108,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     try {
       const formattedPhone = formatPhone(phone)
 
-      // ---- طبيب جديد يسجل → يرسل طلب وينتظر الموافقة ----
+      // ---- تسجيل طبيب جديد → يرسل طلب وينتظر الموافقة ----
       if (!isLoginMode && pendingRole === 'doctor') {
         let avatarUrl: string | null = null
         let certUrl: string | null = null
@@ -117,16 +130,14 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         return
       }
 
-      // ---- مريض جديد يسجل ----
+      // ---- تسجيل مريض جديد → الحساب التجريبي فقط ----
       if (!isLoginMode && pendingRole === 'patient') {
-        // تحقق هل هو حساب تجريبي
-        const demo = DEMO_USERS[formattedPhone]
-        if (demo && demo.role === 'patient') {
-          const success = demoLogin(formattedPhone)
-          if (success) {
-            toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName}` })
-            onClose(); resetForm(); return
-          }
+        const demoAcc = getDemoAccount(formattedPhone)
+        if (demoAcc) {
+          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
+          if (error) throw error
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName || demoAcc.name}` })
+          onClose(); resetForm(); return
         }
         toast({ title: 'خطأ', description: 'استخدم رقم 0977777777 للحساب التجريبي للمريض', variant: 'destructive' })
         setLoading(false); return
@@ -134,17 +145,24 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
 
       // ---- تسجيل الدخول ----
       if (isLoginMode) {
-        // أولاً: تحقق هل هو حساب تجريبي → دخول مباشر بدون Supabase
-        const demo = DEMO_USERS[formattedPhone]
-        if (demo) {
-          const success = demoLogin(formattedPhone)
-          if (success) {
-            toast({ title: 'مرحباً!', description: `أهلاً بك ${demo.name}` })
-            onClose(); resetForm(); return
+        const demoAcc = getDemoAccount(formattedPhone)
+        if (demoAcc) {
+          // تسجيل دخول مباشر بـ email/password
+          const { error } = await supabase.auth.signInWithPassword({ email: demoAcc.email, password: demoAcc.password })
+          if (error) {
+            // إذا لم يكن الحساب موجوداً في Supabase، أنشئه تلقائياً
+            if (error.message.includes('Invalid login credentials')) {
+              toast({ title: 'خطأ', description: 'الحسابات التجريبية غير مفعّلة في Supabase. يرجى تشغيل seed-demo function.', variant: 'destructive' })
+            } else {
+              toast({ title: 'خطأ في التحقق', description: error.message, variant: 'destructive' })
+            }
+            setLoading(false); return
           }
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${demoAcc.name}` })
+          onClose(); resetForm(); return
         }
 
-        // ثانياً: طبيب مقبول من الإدارة (غير تجريبي)
+        // طبيب مقبول من الإدارة (غير تجريبي)
         const { data: doctorData } = await supabase
           .from('doctors').select('is_approved, user_id, full_name')
           .eq('phone', formattedPhone).eq('is_approved', true).single()
@@ -152,14 +170,14 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
           const email = `doctor_${formattedPhone.replace('+', '')}@tabibak.local`
           const { error } = await supabase.auth.signInWithPassword({ email, password: 'Doctor@Tabibak2024!' })
           if (error) {
-            toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول.', variant: 'destructive' })
+            toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول. يرجى المحاولة لاحقاً.', variant: 'destructive' })
             setLoading(false); return
           }
           toast({ title: 'مرحباً!', description: `أهلاً بك ${doctorData.full_name}` })
           onClose(); resetForm(); return
         }
 
-        // ثالثاً: تحقق من حالة الطلب
+        // تحقق من طلب قيد المراجعة
         const { data: requestData } = await supabase
           .from('doctor_requests').select('status')
           .eq('phone', formattedPhone)
@@ -169,7 +187,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
           setLoading(false); return
         }
         if (requestData?.status === 'rejected') {
-          toast({ title: 'تم رفض الطلب', description: 'تم رفض طلبك. يرجى التواصل مع الإدارة.', variant: 'destructive' })
+          toast({ title: 'تم رفض الطلب', description: 'تم رفض طلب تسجيلك. يرجى التواصل مع الإدارة.', variant: 'destructive' })
           setLoading(false); return
         }
 
@@ -320,7 +338,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         {step === 'otp' && (
           <>
             <DialogHeader><DialogTitle className="font-heading text-xl text-center">رمز التحقق</DialogTitle></DialogHeader>
-            <p className="font-body text-sm text-muted-foreground text-center">أدخل الرمز: <strong>123456</strong></p>
+            <p className="font-body text-sm text-muted-foreground text-center">أدخل رمز التحقق المرسل إلى هاتفك</p>
             <div className="space-y-4">
               <input className="premium-input text-center text-2xl tracking-[0.5em]" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} dir="ltr" />
               <button onClick={handleVerifyOTP} disabled={loading || otp.length < 6} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
