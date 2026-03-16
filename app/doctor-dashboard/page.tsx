@@ -174,6 +174,10 @@ export default function DoctorDashboard() {
 
   const saveSettings = async () => {
     if (!doctorData) return
+    if (isDemoDoctor(doctorData.id)) {
+      toast({ title: 'تم حفظ الإعدادات', description: 'التغييرات محفوظة مؤقتاً (حساب تجريبي)' })
+      return
+    }
     const { error } = await supabase.from('doctors').update({
       bio, city, clinic_address: clinicAddress, specialization,
       working_hours_start: to24h(workStartTime, workStartPeriod),
@@ -192,6 +196,10 @@ export default function DoctorDashboard() {
 
   const fetchSlots = async (day: number) => {
     if (!doctorData) return
+    if (isDemoDoctor(doctorData.id)) {
+      setExistingSlots([])
+      return
+    }
     const { data } = await supabase.from('doctor_slots').select('id, day_of_week, slot_time')
       .eq('doctor_id', doctorData.id).eq('day_of_week', day).order('slot_time')
     setExistingSlots(data || [])
@@ -226,6 +234,12 @@ export default function DoctorDashboard() {
   const saveSlots = async () => {
     if (!doctorData || pendingSlots.length === 0) return
     setSavingSlots(true)
+    if (isDemoDoctor(doctorData.id)) {
+      toast({ title: 'تم حفظ المواعيد', description: 'المواعيد محفوظة مؤقتاً (حساب تجريبي)' })
+      setPendingSlots([])
+      setSavingSlots(false)
+      return
+    }
     const rows = pendingSlots.map(time => ({
       doctor_id: doctorData.id,
       day_of_week: slotDay,
