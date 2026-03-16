@@ -9,6 +9,7 @@ import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import { Shield, Check, X, Clock, Users, Activity, Bell, Trash2, Star, LogOut, Eye, ZoomIn } from 'lucide-react'
+import { DEMO_DOCTORS } from '@/lib/demoDoctors'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 export default function AdminDashboard() {
@@ -33,7 +34,10 @@ export default function AdminDashboard() {
       supabase.from('doctors').select('*').order('created_at', { ascending: false }),
     ])
     setRequests(reqRes.data || [])
-    setDoctors(docRes.data || [])
+    // دمج الأطباء التجريبيين مع أطباء Supabase
+    const supabaseIds = new Set((docRes.data || []).map((d: any) => d.id))
+    const demoDocs = DEMO_DOCTORS.filter((d) => !supabaseIds.has(d.id)).map((d) => ({ ...d, _isDemo: true }))
+    setDoctors([...(docRes.data || []), ...demoDocs])
     if (user) {
       const { data: notifData } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
       setNotifications(notifData || [])
@@ -62,6 +66,10 @@ export default function AdminDashboard() {
   }
 
   const deleteDoctor = async (id: string) => {
+    const doc = doctors.find((d: any) => d.id === id)
+    if (doc?._isDemo) {
+      toast({ title: 'لا يمكن حذف الطبيب التجريبي', variant: 'destructive' }); return
+    }
     const { error } = await supabase.from('doctors').delete().eq('id', id)
     if (error) {
       toast({ title: 'خطأ', description: error.message, variant: 'destructive' })
@@ -72,12 +80,22 @@ export default function AdminDashboard() {
   }
 
   const toggleDoctorActive = async (id: string, current: boolean) => {
+    const doc = doctors.find((d: any) => d.id === id)
+    if (doc?._isDemo) {
+      setDoctors((prev: any[]) => prev.map((d) => d.id === id ? { ...d, is_active: !current } : d))
+      toast({ title: !current ? 'تم تفعيل الطبيب' : 'تم تعطيل الطبيب' }); return
+    }
     await supabase.from('doctors').update({ is_active: !current }).eq('id', id)
     toast({ title: !current ? 'تم تفعيل الطبيب' : 'تم تعطيل الطبيب' })
     fetchAll()
   }
 
   const toggleFeatured = async (id: string, current: boolean) => {
+    const doc = doctors.find((d: any) => d.id === id)
+    if (doc?._isDemo) {
+      setDoctors((prev: any[]) => prev.map((d) => d.id === id ? { ...d, is_featured: !current } : d))
+      toast({ title: !current ? 'تم تمييز الطبيب' : 'تم إلغاء التمييز' }); return
+    }
     await supabase.from('doctors').update({ is_featured: !current }).eq('id', id)
     toast({ title: !current ? 'تم تمييز الطبيب' : 'تم إلغاء التمييز' })
     fetchAll()
