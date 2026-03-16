@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '@/integrations/supabase/client'
 import type { User, Session } from '@supabase/supabase-js'
 
-// ===== بيانات الحسابات التجريبية المحلية =====
+// ===== الحسابات التجريبية =====
 export const DEMO_USERS: Record<string, {
   id: string
   name: string
@@ -13,37 +13,35 @@ export const DEMO_USERS: Record<string, {
   doctorData?: any
 }> = {
   '+963999999999': {
-    id: 'demo-admin-001',
+    id: 'aaaaaaaa-0000-0000-0000-000000000001',
     name: 'Admin Test',
     phone: '+963999999999',
     role: 'admin',
   },
   '+963988888888': {
-    id: 'demo-doctor-001',
+    id: 'aaaaaaaa-0000-0000-0000-000000000002',
     name: 'د. أحمد محمد',
     phone: '+963988888888',
     role: 'doctor',
     doctorData: {
-      id: 'demo-doctor-001',
+      id: 'f02e7fa6-b9f4-4505-a70f-f9ef01d3dfb6',
+      user_id: 'aaaaaaaa-0000-0000-0000-000000000002',
       full_name: 'د. أحمد محمد',
       specialization: 'طب قلبية',
       phone: '+963988888888',
       city: 'دمشق',
       clinic_address: 'شارع الحمراء',
-      bio: 'أخصائي أمراض القلب بخبرة 15 سنة',
-      is_approved: true,
-      is_active: true,
-      is_featured: true,
-      rating: 4.8,
-      rating_count: 24,
-      working_hours_start: '08:00',
-      working_hours_end: '16:00',
+      bio: 'أخصائي أمراض القلب والأوعية الدموية بخبرة 15 سنة',
+      diseases_treated: ['أمراض القلب', 'ارتفاع ضغط الدم', 'تصلب الشرايين', 'قصور القلب'],
+      is_approved: true, is_active: true, is_featured: true,
+      rating: 4.8, rating_count: 24,
+      working_hours_start: '08:00', working_hours_end: '16:00',
       working_days: [0, 1, 2, 3, 4],
       avatar_url: '/doctors/dr-ahmad.jpg',
     },
   },
   '+963977777777': {
-    id: 'demo-patient-001',
+    id: 'aaaaaaaa-0000-0000-0000-000000000003',
     name: 'Patient Demo',
     phone: '+963977777777',
     role: 'patient',
@@ -70,7 +68,8 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false, isDoctor: false, isPatient: false,
   doctorData: null, loading: true,
   demoLogin: () => false,
-  signOut: async () => {}, refreshProfile: async () => {},
+  signOut: async () => {},
+  refreshProfile: async () => {},
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -100,12 +99,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) await fetchUserData(user.id)
   }
 
-  // تسجيل دخول تجريبي بدون Supabase Auth
+  // ===== تسجيل دخول تجريبي - بدون Supabase =====
   const demoLogin = (phone: string): boolean => {
     const demo = DEMO_USERS[phone]
     if (!demo) return false
 
-    // إنشاء user وهمي
     const fakeUser = {
       id: demo.id,
       email: `${demo.role}@demo.tabibak.local`,
@@ -114,18 +112,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       user_metadata: { full_name: demo.name },
       aud: 'authenticated',
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      role: 'authenticated',
+      identities: [],
     } as unknown as User
 
     setUser(fakeUser)
-    setSession({ user: fakeUser } as unknown as Session)
+    setSession({ user: fakeUser, access_token: 'demo', token_type: 'bearer' } as unknown as Session)
     setProfile({ user_id: demo.id, full_name: demo.name, phone: demo.phone })
     setRoles([demo.role])
     setDoctorData(demo.doctorData || null)
     setIsDemoSession(true)
+    setLoading(false)
     return true
   }
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (isDemoSession) { setLoading(false); return }
+      setSession(session)
+      setUser(session?.user ?? null)
+      if (session?.user) fetchUserData(session.user.id)
+      setLoading(false)
+    })
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (isDemoSession) return
       setSession(session)
@@ -137,13 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       setLoading(false)
     })
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isDemoSession) { setLoading(false); return }
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) fetchUserData(session.user.id)
-      setLoading(false)
-    })
+
     return () => subscription.unsubscribe()
   }, [isDemoSession])
 
@@ -153,7 +157,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } else {
       await supabase.auth.signOut()
     }
-    setUser(null); setSession(null); setProfile(null); setRoles([]); setDoctorData(null)
+    setUser(null); setSession(null); setProfile(null)
+    setRoles([]); setDoctorData(null)
   }
 
   return (
@@ -162,7 +167,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isAdmin: roles.includes('admin'),
       isDoctor: roles.includes('doctor'),
       isPatient: roles.includes('patient'),
-      doctorData, loading, demoLogin, signOut, refreshProfile,
+      doctorData, loading,
+      demoLogin, signOut, refreshProfile,
     }}>
       {children}
     </AuthContext.Provider>
