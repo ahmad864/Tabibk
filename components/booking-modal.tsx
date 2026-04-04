@@ -5,12 +5,28 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
-import { Calendar, Clock, CheckCircle } from 'lucide-react'
+import { Calendar, Clock, CheckCircle, AlarmClock } from 'lucide-react'
 import { isDemoDoctor, getDemoSlotsForDay } from '@/lib/demoDoctors'
 import { addDemoBooking, getDemoBookedSlotsForDate } from '@/lib/demoBookings'
 
 interface BookingModalProps { open: boolean; onClose: () => void; doctor: any }
 const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+
+// حساب الوقت المتبقي حتى الموعد
+function getTimeRemaining(date: string, time: string): string {
+  if (!date || !time) return ''
+  const appointmentDate = new Date(`${date}T${time}:00`)
+  const now = new Date()
+  const diffMs = appointmentDate.getTime() - now.getTime()
+  if (diffMs <= 0) return 'الموعد قد حان'
+  const diffMins = Math.floor(diffMs / 60000)
+  const days = Math.floor(diffMins / 1440)
+  const hours = Math.floor((diffMins % 1440) / 60)
+  const mins = diffMins % 60
+  if (days > 0) return `${days} يوم و ${hours} ساعة`
+  if (hours > 0) return `${hours} ساعة و ${mins} دقيقة`
+  return `${mins} دقيقة`
+}
 
 export default function BookingModal({ open, onClose, doctor }: BookingModalProps) {
   const { user, profile } = useAuth()
@@ -20,6 +36,17 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
   const [bookedSlots, setBookedSlots] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [timeRemaining, setTimeRemaining] = useState('')
+
+  // تحديث الوقت المتبقي كل دقيقة
+  useEffect(() => {
+    if (!selectedDate || !selectedTime) { setTimeRemaining(''); return }
+    setTimeRemaining(getTimeRemaining(selectedDate, selectedTime))
+    const interval = setInterval(() => {
+      setTimeRemaining(getTimeRemaining(selectedDate, selectedTime))
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [selectedDate, selectedTime])
 
   useEffect(() => {
     if (selectedDate && doctor) {
@@ -83,12 +110,20 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
           patientPhone: profile.phone,
           status: 'pending',
         })
-        // إشعار للمريض في Supabase
+        const remaining = getTimeRemaining(selectedDate, selectedTime)
+        // إشعار تأكيد الحجز
         await supabase.from('notifications').insert({
           user_id: user.id,
           title: 'تم إرسال طلب الحجز',
           message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
           type: 'booking',
+        }).then(() => {}).catch(() => {})
+        // إشعار تذكير بالموعد
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          title: '⏰ تذكير بموعدك',
+          message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
+          type: 'reminder',
         }).then(() => {}).catch(() => {})
         setSuccess(true)
         toast({ title: 'تم إرسال طلب الحجز!', description: 'في انتظار تأكيد الطبيب' })
@@ -103,6 +138,7 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
         appointment_date: selectedDate, appointment_time: selectedTime,
       })
       if (error) throw error
+      const remaining = getTimeRemaining(selectedDate, selectedTime)
       if (doctor.user_id) {
         await supabase.from('notifications').insert({
           user_id: doctor.user_id, title: 'حجز جديد',
@@ -110,10 +146,17 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
           type: 'booking',
         })
       }
+      // إشعار تأكيد الحجز
       await supabase.from('notifications').insert({
         user_id: user.id, title: 'تم إرسال طلب الحجز',
         message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
         type: 'booking',
+      })
+      // إشعار تذكير بالموعد
+      await supabase.from('notifications').insert({
+        user_id: user.id, title: '⏰ تذكير بموعدك',
+        message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
+        type: 'reminder',
       })
       setSuccess(true)
       toast({ title: 'تم الحجز بنجاح!' })
@@ -126,7 +169,7 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
 
   const handleClose = () => {
     onClose(); setSuccess(false); setSelectedDate(''); setSelectedTime('')
-    setAvailableSlots([]); setBookedSlots([])
+    setAvailableSlots([]); setBookedSlots([]); setTimeRemaining('')
   }
 
   return (
@@ -137,7 +180,13 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
             <h3 className="font-heading text-xl font-bold mb-2">تم إرسال طلب الحجز</h3>
             <p className="font-body text-muted-foreground mb-1">الموعد: {selectedDate} الساعة {selectedTime}</p>
-            <p className="font-body text-sm text-muted-foreground">ستصلك إشعار عند تأكيد الطبيب</p>
+            {timeRemaining && (
+              <div className="flex items-center justify-center gap-2 mt-3 bg-primary/10 rounded-xl px-4 py-2.5">
+                <AlarmClock className="w-4 h-4 text-primary" />
+                <p className="font-body text-sm text-primary font-semibold">الوقت المتبقي: {timeRemaining}</p>
+              </div>
+            )}
+            <p className="font-body text-sm text-muted-foreground mt-3">ستصلك إشعار عند تأكيد الطبيب</p>
           </div>
         ) : (
           <>
@@ -196,6 +245,13 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
                       })}
                     </div>
                   )}
+                </div>
+              )}
+
+              {selectedDate && selectedTime && timeRemaining && (
+                <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-4 py-2.5">
+                  <AlarmClock className="w-4 h-4 text-primary shrink-0" />
+                  <p className="font-body text-sm text-primary font-semibold">الوقت المتبقي حتى الموعد: {timeRemaining}</p>
                 </div>
               )}
 
