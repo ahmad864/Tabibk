@@ -46,6 +46,10 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
   const [certificateFile, setCertificateFile] = useState<File | null>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const certInputRef = useRef<HTMLInputElement>(null)
+  const [age, setAge] = useState('')
+  const [isUniversityStudent, setIsUniversityStudent] = useState<'yes' | 'no' | null>(null)
+  const [hasChronicDisease, setHasChronicDisease] = useState<'yes' | 'no' | null>(null)
+  const [chronicDiseases, setChronicDiseases] = useState('')
 
   const validatePhone = (p: string) => {
     const cleaned = p.replace(/\D/g, '')
@@ -186,6 +190,7 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
     setStep(getInitialStep()); setPhone(''); setFullName(''); setSpecialization('')
     setCity(''); setClinicAddress(''); setOtp(''); setIsLoginMode(false)
     setAvatarFile(null); setCertificateFile(null)
+    setAge(''); setIsUniversityStudent(null); setHasChronicDisease(null); setChronicDiseases('')
   }
 
   const isDoctorFormValid = fullName.trim() && specialization && phone.trim() && city.trim() && clinicAddress.trim() && avatarFile && certificateFile
@@ -246,16 +251,57 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         {step === 'patient' && (
           <>
             <DialogHeader><DialogTitle className="font-heading text-xl text-center">حساب مريض</DialogTitle></DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[65vh] overflow-y-auto px-1">
               <div>
                 <label className="font-body text-sm text-muted-foreground mb-1 block">الاسم الكامل <span className="text-destructive">*</span></label>
                 <input className="premium-input" placeholder="أدخل اسمك الكامل" value={fullName} onChange={(e) => setFullName(e.target.value)} />
               </div>
               <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">العمر <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="مثال: 25" type="number" min="1" max="120" value={age} onChange={(e) => setAge(e.target.value)} dir="ltr" />
+              </div>
+              <div>
                 <label className="font-body text-sm text-muted-foreground mb-1 block">رقم الهاتف <span className="text-destructive">*</span></label>
                 <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
               </div>
-              <button onClick={handleSendOTP} disabled={!phone || !fullName} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-2 block">هل أنت طالب جامعي؟ <span className="text-destructive">*</span></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setIsUniversityStudent('yes')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${isUniversityStudent === 'yes' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    نعم
+                  </button>
+                  <button type="button" onClick={() => setIsUniversityStudent('no')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${isUniversityStudent === 'no' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    لا
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-2 block">هل لديك أمراض مزمنة؟ <span className="text-destructive">*</span></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setHasChronicDisease('yes')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${hasChronicDisease === 'yes' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    نعم
+                  </button>
+                  <button type="button" onClick={() => { setHasChronicDisease('no'); setChronicDiseases('') }} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${hasChronicDisease === 'no' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    لا
+                  </button>
+                </div>
+                {hasChronicDisease === 'yes' && (
+                  <div className="mt-3">
+                    <textarea
+                      className="premium-input resize-none"
+                      rows={3}
+                      placeholder="اذكر الأمراض المزمنة (مثال: السكري، ضغط الدم...)"
+                      value={chronicDiseases}
+                      onChange={(e) => setChronicDiseases(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSendOTP}
+                disabled={!phone || !fullName || !age || !isUniversityStudent || !hasChronicDisease || (hasChronicDisease === 'yes' && !chronicDiseases.trim())}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
                 التالي
               </button>
               <button onClick={() => setStep('choose-role')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
