@@ -7,7 +7,7 @@ import Footer from '@/components/footer'
 import BackButton from '@/components/back-button'
 import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, AlarmClock } from 'lucide-react'
 
 export default function NotificationsPage() {
   const { user, loading: authLoading } = useAuth()
@@ -31,6 +31,8 @@ export default function NotificationsPage() {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n))
   }
 
+  const isReminder = (n: any) => n.type === 'reminder'
+
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -45,9 +47,21 @@ export default function NotificationsPage() {
           ) : (
             <div className="space-y-3">
               {notifications.map((n) => (
-                <div key={n.id} className={`premium-card flex items-start gap-4 ${!n.is_read ? 'border-r-4 border-r-primary' : 'opacity-70'}`}>
+                <div key={n.id} className={`premium-card flex items-start gap-4 ${
+                  isReminder(n)
+                    ? 'border-r-4 border-r-amber-400 bg-amber-50/50 dark:bg-amber-900/10'
+                    : !n.is_read
+                    ? 'border-r-4 border-r-primary'
+                    : 'opacity-70'
+                }`}>
+                  <div className={`mt-0.5 shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${isReminder(n) ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-primary/10'}`}>
+                    {isReminder(n)
+                      ? <AlarmClock className="w-5 h-5 text-amber-500" />
+                      : <Bell className="w-5 h-5 text-primary" />
+                    }
+                  </div>
                   <div className="flex-1">
-                    <h3 className="font-heading font-semibold text-foreground">{n.title}</h3>
+                    <h3 className={`font-heading font-semibold ${isReminder(n) ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{n.title}</h3>
                     <p className="font-body text-sm text-muted-foreground">{n.message}</p>
                     <p className="font-body text-xs text-muted-foreground mt-1">{new Date(n.created_at).toLocaleDateString('ar-SY')}</p>
                   </div>
