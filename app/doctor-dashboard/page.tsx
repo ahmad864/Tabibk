@@ -8,7 +8,7 @@ import BackButton from '@/components/back-button'
 import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
-import { Calendar, Clock, Check, X, Settings, Camera, Plus, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Check, X, Settings, Camera, Plus, Trash2, UserX } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { isDemoDoctor, DEMO_DOCTORS } from '@/lib/demoDoctors'
 import { getDemoBookingsForDoctor, updateDemoBookingStatus, type DemoBooking } from '@/lib/demoBookings'
@@ -259,10 +259,41 @@ export default function DoctorDashboard() {
     setSavingSlots(false)
   }
 
+  const handlePredictAbsence = async (id: string) => {
+    const apt = appointments.find((a) => a.id === id)
+    if (!apt) return
+
+    const { error } = await supabase.from('absence_predictions').insert({
+      appointment_id: apt.id,
+      doctor_id: apt.doctor_id,
+      patient_id: apt.patient_id,
+      patient_name: apt.patient_name,
+      appointment_date: apt.appointment_date,
+      appointment_time: apt.appointment_time,
+    })
+
+    if (error) {
+      toast({ title: 'خطأ', description: error.message, variant: 'destructive' }); return
+    }
+    toast({ title: '🔮 تم إرسال طلب التنبؤ', description: 'سيتم تحليل البيانات قريباً' })
+  }
+
   const statusBadge = (status: string) => {
-    const styles: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', confirmed: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800', cancelled: 'bg-muted text-muted-foreground' }
-    const labels: Record<string, string> = { pending: 'بانتظار التأكيد', confirmed: 'مؤكد', rejected: 'مرفوض', cancelled: 'ملغى' }
-    return <span className={`px-3 py-1 rounded-full text-xs font-body ${styles[status]}`}>{labels[status]}</span>
+    const styles: Record<string, string> = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      confirmed: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      cancelled: 'bg-muted text-muted-foreground',
+      absent: 'bg-orange-100 text-orange-800',
+    }
+    const labels: Record<string, string> = {
+      pending: 'بانتظار التأكيد',
+      confirmed: 'مؤكد',
+      rejected: 'مرفوض',
+      cancelled: 'ملغى',
+      absent: 'غائب',
+    }
+    return <span className={`px-3 py-1 rounded-full text-xs font-body ${styles[status] || ''}`}>{labels[status] || status}</span>
   }
 
   const avatarUrl = doctorData?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${doctorData?.full_name}&backgroundColor=0055A0&textColor=ffffff`
@@ -337,6 +368,12 @@ export default function DoctorDashboard() {
                           <X className="w-4 h-4" /> رفض
                         </button>
                       </div>
+                    )}
+                    {apt.status === 'confirmed' && (
+                      <button onClick={() => handlePredictAbsence(apt.id)}
+                        className="px-4 py-2 rounded-xl bg-orange-500 text-white font-body text-sm flex items-center gap-1 hover:bg-orange-600 transition-colors">
+                        <UserX className="w-4 h-4" /> تنبأ بالغياب
+                      </button>
                     )}
                   </div>
                 ))
