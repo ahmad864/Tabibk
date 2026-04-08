@@ -130,8 +130,28 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
             onClose(); resetForm(); return
           }
         }
-        toast({ title: 'خطأ', description: 'استخدم رقم 0977777777 للحساب التجريبي للمريض', variant: 'destructive' })
-        setLoading(false); return
+
+        // حفظ بيانات المريض في قاعدة البيانات
+        const { error: insertError } = await supabase.from('patients').insert({
+          full_name: fullName,
+          phone: formattedPhone,
+          age: parseInt(age),
+          is_university_student: isUniversityStudent === 'yes',
+          has_chronic_disease: hasChronicDisease === 'yes',
+          chronic_diseases: hasChronicDisease === 'yes' ? chronicDiseases.trim() : null,
+        })
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            toast({ title: 'خطأ', description: 'رقم الهاتف مسجل مسبقاً', variant: 'destructive' })
+          } else {
+            toast({ title: 'خطأ', description: insertError.message, variant: 'destructive' })
+          }
+          setLoading(false); return
+        }
+
+        toast({ title: 'تم إنشاء الحساب!', description: `أهلاً بك ${fullName}` })
+        onClose(); resetForm(); return
       }
 
       // ---- تسجيل الدخول ----
