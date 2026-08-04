@@ -112,19 +112,21 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
         })
         const remaining = getTimeRemaining(selectedDate, selectedTime)
         // إشعار تأكيد الحجز
-        await supabase.from('notifications').insert({
+        const { error: notifErr1 } = await supabase.from('notifications').insert({
           user_id: user.id,
           title: 'تم إرسال طلب الحجز',
           message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
           type: 'booking',
-        }).then(() => {}).catch(() => {})
+        })
+        if (notifErr1) console.error('notification insert failed:', notifErr1.message)
         // إشعار تذكير بالموعد
-        await supabase.from('notifications').insert({
+        const { error: notifErr2 } = await supabase.from('notifications').insert({
           user_id: user.id,
           title: '⏰ تذكير بموعدك',
           message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
           type: 'reminder',
-        }).then(() => {}).catch(() => {})
+        })
+        if (notifErr2) console.error('notification insert failed:', notifErr2.message)
         setSuccess(true)
         toast({ title: 'تم إرسال طلب الحجز!', description: 'في انتظار تأكيد الطبيب' })
         setLoading(false)
@@ -140,24 +142,27 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
       if (error) throw error
       const remaining = getTimeRemaining(selectedDate, selectedTime)
       if (doctor.user_id) {
-        await supabase.from('notifications').insert({
+        const { error: notifDocErr } = await supabase.from('notifications').insert({
           user_id: doctor.user_id, title: 'حجز جديد',
           message: `حجز جديد من ${profile.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}`,
           type: 'booking',
         })
+        if (notifDocErr) console.error('doctor notification failed:', notifDocErr.message)
       }
       // إشعار تأكيد الحجز
-      await supabase.from('notifications').insert({
+      const { error: notifErr1 } = await supabase.from('notifications').insert({
         user_id: user.id, title: 'تم إرسال طلب الحجز',
         message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
         type: 'booking',
       })
+      if (notifErr1) console.error('notification insert failed:', notifErr1.message)
       // إشعار تذكير بالموعد
-      await supabase.from('notifications').insert({
+      const { error: notifErr2 } = await supabase.from('notifications').insert({
         user_id: user.id, title: '⏰ تذكير بموعدك',
         message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
         type: 'reminder',
       })
+      if (notifErr2) console.error('notification insert failed:', notifErr2.message)
       setSuccess(true)
       toast({ title: 'تم الحجز بنجاح!' })
     } catch (err: any) {
