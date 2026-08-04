@@ -112,12 +112,13 @@ export default function DoctorDashboard() {
         ? `تم تأكيد حجزك مع ${doctorData?.full_name} - يوم ${dayName} بتاريخ ${apt.appointment_date} الساعة ${timeStr}`
         : `تم رفض موعدك مع ${doctorData?.full_name} بتاريخ ${apt.appointment_date}`
       // أرسل إشعار للمريض
-      await supabase.from('notifications').insert({
+      const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: apt.patient_id,
         title: status === 'confirmed' ? '✅ تم تأكيد حجزك' : '❌ تم رفض موعدك',
         message: notifMessage,
         type: 'booking',
-      }).then(() => {}).catch(() => {})
+      })
+      if (notifErr) console.error('patient notification failed:', notifErr.message)
       toast({ title: status === 'confirmed' ? 'تم تأكيد الموعد' : 'تم رفض الموعد' })
       fetchAppointments()
       return
@@ -133,12 +134,13 @@ export default function DoctorDashboard() {
       : `❌ تم رفض موعدك مع ${doctorData?.full_name} بتاريخ ${apt.appointment_date}`
     // إرسال إشعار للمريض
     if (apt.patient_id) {
-      await supabase.from('notifications').insert({
+      const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: apt.patient_id,
         title: status === 'confirmed' ? '✅ تم تأكيد حجزك' : '❌ تم رفض موعدك',
         message: notifMessage,
         type: 'booking',
-      }).then(() => {}).catch(() => {})
+      })
+      if (notifErr) console.error('patient notification failed:', notifErr.message)
     }
     toast({ title: status === 'confirmed' ? 'تم تأكيد الموعد' : 'تم رفض الموعد' })
     fetchAppointments()
