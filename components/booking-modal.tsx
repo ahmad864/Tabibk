@@ -111,6 +111,15 @@ export default function BookingModal({ open, onClose, doctor }: BookingModalProp
           status: 'pending',
         })
         const remaining = getTimeRemaining(selectedDate, selectedTime)
+        // إشعار للطبيب بالحجز الجديد
+        if (doctor.user_id) {
+          const { error: notifDocErr } = await supabase.from('notifications').insert({
+            user_id: doctor.user_id, title: 'حجز جديد',
+            message: `حجز جديد من ${profile.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}`,
+            type: 'booking',
+          })
+          if (notifDocErr) console.error('doctor notification failed:', notifDocErr.message)
+        }
         // إشعار تأكيد الحجز
         const { error: notifErr1 } = await supabase.from('notifications').insert({
           user_id: user.id,
