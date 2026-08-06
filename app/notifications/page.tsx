@@ -7,13 +7,16 @@ import Footer from '@/components/footer'
 import BackButton from '@/components/back-button'
 import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
-import { Bell, Check, AlarmClock } from 'lucide-react'
+import { Bell, Check, X, AlarmClock } from 'lucide-react'
+import { confirmOrRejectAppointment } from '@/lib/appointmentActions'
+import { toast } from '@/hooks/use-toast'
 
 export default function NotificationsPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, doctorData, loading: authLoading } = useAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [actingId, setActingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) { router.push('/'); return }
@@ -32,6 +35,30 @@ export default function NotificationsPage() {
   }
 
   const isReminder = (n: any) => n.type === 'reminder'
+  // إشعار "حجز جديد" عند الطبيب لسا ما اتخذ فيه قرار
+  const isActionableBooking = (n: any) =>
+    n.type === 'booking' && n.appointment_id && n.action_status === 'pending'
+
+  const handleAction = async (n: any, status: 'confirmed' | 'rejected') => {
+    if (!doctorData) return
+    setActingId(n.id)
+    const result = await confirmOrRejectAppointment({
+      appointmentId: n.appointment_id,
+      isDemo: !!n.is_demo,
+      status,
+      doctorName: doctorData.full_name,
+      sourceNotificationId: n.id,
+    })
+    setActingId(null)
+    if (!result.success) {
+      toast({ title: 'خطأ', description: result.error, variant: 'destructive' })
+      return
+    }
+    toast({ title: status === 'confirmed' ? 'تم قبول الحجز' : 'تم رفض الحجز' })
+    setNotifications((prev) => prev.map((x) => x.id === n.id
+      ? { ...x, action_status: status === 'confirmed' ? 'accepted' : 'rejected', is_read: true }
+      : x))
+  }
 
   return (
     <div className="min-h-screen">
@@ -64,8 +91,35 @@ export default function NotificationsPage() {
                     <h3 className={`font-heading font-semibold ${isReminder(n) ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{n.title}</h3>
                     <p className="font-body text-sm text-muted-foreground">{n.message}</p>
                     <p className="font-body text-xs text-muted-foreground mt-1">{new Date(n.created_at).toLocaleDateString('ar-SY')}</p>
+
+                    {isActionableBooking(n) && (
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          disabled={actingId === n.id}
+                          onClick={() => handleAction(n, 'confirmed')}
+                          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-green-600 text-white text-sm font-body font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        >
+                          <Check className="w-4 h-4" /> قبول
+                        </button>
+                        <button
+                          disabled={actingId === n.id}
+                          onClick={() => handleAction(n, 'rejected')}
+                          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-red-600 text-white text-sm font-body font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors"
+                        >
+                          <X className="w-4 h-4" /> رفض
+                        </button>
+                      </div>
+                    )}
+                    {n.type === 'booking' && n.action_status === 'accepted' && (
+                      <p className="text-xs text-green-600 font-body mt-2">✓ تم القبول</p>
+                    )}
+                    {n.type === 'booking' && n.action_status === 'rejected' && (
+                      <p className="text-xs text-red-600 font-body mt-2">✕ تم الرفض</p>
+                    )}
                   </div>
-                  {!n.is_read && <button onClick={() => markAsRead(n.id)} className="p-2 rounded-xl hover:bg-accent text-primary transition-colors"><Check className="w-5 h-5" /></button>}
+                  {!n.is_read && !isActionableBooking(n) && (
+                    <button onClick={() => markAsRead(n.id)} className="p-2 rounded-xl hover:bg-accent text-primary transition-colors"><Check className="w-5 h-5" /></button>
+                  )}
                 </div>
               ))}
             </div>
