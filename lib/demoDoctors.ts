@@ -35,7 +35,7 @@ export const DEMO_SLOTS: Record<number, string[]> = {
 export const DEMO_DOCTORS: DoctorFull[] = [
   {
     id: 'f02e7fa6-b9f4-4505-a70f-f9ef01d3dfb6',
-    user_id: 'efe416c2-3ebf-4d28-ba2a-ab2aaefda909',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000002',
     full_name: 'د. أحمد محمد',
     specialization: 'طب قلبية',
     phone: '+963988888888',
@@ -51,7 +51,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '406a1a52-4c6a-4b76-b6d7-77389c58678e',
-    user_id: 'c3f72aa8-0224-4bcc-a954-dd249842d177',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000004',
     full_name: 'د. سارة علي',
     specialization: 'جهاز هضمي',
     phone: '+963966666666',
@@ -67,7 +67,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: 'a61fa9ff-5a7e-40e3-b77b-04e6217774c3',
-    user_id: 'f05e2fed-efc3-46f8-9ff2-f9d4d522d794',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000005',
     full_name: 'د. علي حسن',
     specialization: 'طب أعصاب',
     phone: '+963955555555',
@@ -83,7 +83,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '389912d5-2109-4258-9aaf-de3e987c249a',
-    user_id: 'ca057f0c-68f5-4958-8ee7-2ed407d9ca20',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000006',
     full_name: 'د. ليلى كريم',
     specialization: 'طب أطفال',
     phone: '+963944444444',
@@ -99,7 +99,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '86613f43-7cc9-4f0e-ab50-1d14175bc4b8',
-    user_id: 'b66edc83-2159-4a4a-a1bb-cac6b2c767fc',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000007',
     full_name: 'د. عمر يوسف',
     specialization: 'طب جلدية',
     phone: '+963933333333',
@@ -115,7 +115,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '38adc132-69cb-464d-a3dd-f3b269b95588',
-    user_id: '7f105a6e-c283-4eaa-921f-426f9249eda9',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000008',
     full_name: 'د. هاني سعد',
     specialization: 'طب عظمية',
     phone: '+963922222222',
@@ -131,7 +131,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: 'da07e5f5-a3cb-489e-857a-1656ba40fd31',
-    user_id: 'ca62ea94-75e2-40b2-8ae8-74370f480797',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000009',
     full_name: 'د. رنا إبراهيم',
     specialization: 'طب نسائية',
     phone: '+963911111111',
@@ -147,7 +147,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '805120a7-7e33-41e4-b232-4ce7f9cc2b81',
-    user_id: '7bef41c3-05f2-4332-aef9-895e99bbbbfa',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000010',
     full_name: 'د. كريم ناصر',
     specialization: 'طب عيون',
     phone: '+963910000000',
@@ -163,7 +163,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '2054e50a-9f8f-4117-a111-b0bb271f7670',
-    user_id: '94d902dd-3e0c-49d5-a639-8d2f320137ab',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000011',
     full_name: 'د. منى خالد',
     specialization: 'طب باطنية',
     phone: '+963909000000',
@@ -179,7 +179,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '976eef04-0528-4737-820b-523482d10d17',
-    user_id: '5c0999d1-4ae5-44d1-ae6b-2d2971066153',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000012',
     full_name: 'د. طارق سليمان',
     specialization: 'طب قلبية',
     phone: '+963908000000',
@@ -195,7 +195,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: 'c8539898-5134-45a0-a2ab-6458fc35d7f0',
-    user_id: '0d7e4abf-86b3-4f76-a9bc-10c816ca045c',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000013',
     full_name: 'د. نورا فارس',
     specialization: 'طب جلدية',
     phone: '+963907000000',
@@ -211,7 +211,7 @@ export const DEMO_DOCTORS: DoctorFull[] = [
   },
   {
     id: '642ebd9a-7298-4806-ae1f-5e194552cc27',
-    user_id: 'f2d5978e-0af0-4cab-b51a-489fa78604f5',
+    user_id: 'aaaaaaaa-0000-0000-0000-000000000014',
     full_name: 'د. بلال عمر',
     specialization: 'طب عظمية',
     phone: '+963906000000',
