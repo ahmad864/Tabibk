@@ -1,281 +1,405 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useAuth } from '@/context/auth-context'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
-import { Calendar, Clock, CheckCircle, AlarmClock } from 'lucide-react'
-import { isDemoDoctor, getDemoSlotsForDay } from '@/lib/demoDoctors'
-import { addDemoBooking, getDemoBookedSlotsForDate } from '@/lib/demoBookings'
+import { User, Stethoscope, Upload, LogIn, UserPlus, CheckCircle } from 'lucide-react'
+import { formatPhone } from '@/lib/demoAccounts'
+import { useAuth, DEMO_USERS } from '@/context/auth-context'
 
-interface BookingModalProps { open: boolean; onClose: () => void; doctor: any }
-const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
-
-// حساب الوقت المتبقي حتى الموعد
-function getTimeRemaining(date: string, time: string): string {
-  if (!date || !time) return ''
-  const appointmentDate = new Date(`${date}T${time}:00`)
-  const now = new Date()
-  const diffMs = appointmentDate.getTime() - now.getTime()
-  if (diffMs <= 0) return 'الموعد قد حان'
-  const diffMins = Math.floor(diffMs / 60000)
-  const days = Math.floor(diffMins / 1440)
-  const hours = Math.floor((diffMins % 1440) / 60)
-  const mins = diffMins % 60
-  if (days > 0) return `${days} يوم و ${hours} ساعة`
-  if (hours > 0) return `${hours} ساعة و ${mins} دقيقة`
-  return `${mins} دقيقة`
+interface AuthModalProps {
+  open: boolean
+  onClose: () => void
+  defaultRole?: 'patient' | 'doctor'
+  defaultMode?: 'login' | 'register'
 }
 
-export default function BookingModal({ open, onClose, doctor }: BookingModalProps) {
-  const { user, profile } = useAuth()
-  const [selectedDate, setSelectedDate] = useState('')
-  const [selectedTime, setSelectedTime] = useState('')
-  const [availableSlots, setAvailableSlots] = useState<string[]>([])
-  const [bookedSlots, setBookedSlots] = useState<string[]>([])
+const specializations = [
+  'طب قلبية', 'جهاز هضمي', 'طب أعصاب', 'طب أطفال',
+  'طب جلدية', 'طب عظمية', 'طب عيون', 'طب باطنية', 'طب نسائية',
+]
+
+type Step = 'choose-action' | 'login' | 'choose-role' | 'patient' | 'doctor' | 'otp' | 'doctor-success'
+
+export default function AuthModal({ open, onClose, defaultRole, defaultMode }: AuthModalProps) {
+  const { demoLogin } = useAuth()
+
+  const getInitialStep = (): Step => {
+    if (defaultMode === 'login') return 'login'
+    if (defaultRole === 'doctor') return 'doctor'
+    if (defaultRole === 'patient') return 'patient'
+    return 'choose-action'
+  }
+
+  const [step, setStep] = useState<Step>(getInitialStep())
+  const [phone, setPhone] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [specialization, setSpecialization] = useState('')
+  const [city, setCity] = useState('')
+  const [clinicAddress, setClinicAddress] = useState('')
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [timeRemaining, setTimeRemaining] = useState('')
+  const [pendingRole, setPendingRole] = useState<'patient' | 'doctor'>('patient')
+  const [isLoginMode, setIsLoginMode] = useState(false)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [certificateFile, setCertificateFile] = useState<File | null>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+  const certInputRef = useRef<HTMLInputElement>(null)
+  const [age, setAge] = useState('')
+  const [isUniversityStudent, setIsUniversityStudent] = useState<'yes' | 'no' | null>(null)
+  const [hasChronicDisease, setHasChronicDisease] = useState<'yes' | 'no' | null>(null)
+  const [chronicDiseases, setChronicDiseases] = useState('')
 
-  // تحديث الوقت المتبقي كل دقيقة
-  useEffect(() => {
-    if (!selectedDate || !selectedTime) { setTimeRemaining(''); return }
-    setTimeRemaining(getTimeRemaining(selectedDate, selectedTime))
-    const interval = setInterval(() => {
-      setTimeRemaining(getTimeRemaining(selectedDate, selectedTime))
-    }, 60000)
-    return () => clearInterval(interval)
-  }, [selectedDate, selectedTime])
-
-  useEffect(() => {
-    if (selectedDate && doctor) {
-      loadSlots()
-      loadBookedSlots()
-    }
-  }, [selectedDate, doctor])
-
-  const loadSlots = async () => {
-    if (!doctor || !selectedDate) return
-    const dayOfWeek = new Date(selectedDate).getDay()
-    if (isDemoDoctor(doctor.id)) {
-      setAvailableSlots(getDemoSlotsForDay(dayOfWeek))
-      return
-    }
-    const { data } = await supabase
-      .from('doctor_slots').select('slot_time')
-      .eq('doctor_id', doctor.id).eq('day_of_week', dayOfWeek).order('slot_time')
-    setAvailableSlots(data?.map((s: any) => s.slot_time.slice(0, 5)) || [])
+  const validatePhone = (p: string) => {
+    const cleaned = p.replace(/\D/g, '')
+    return /^09\d{8}$/.test(cleaned) || /^963\d{9}$/.test(cleaned) || /^\+963\d{9}$/.test(p)
   }
 
-  const loadBookedSlots = async () => {
-    if (!doctor || !selectedDate) return
-    if (isDemoDoctor(doctor.id)) {
-      setBookedSlots(getDemoBookedSlotsForDate(doctor.id, selectedDate))
-      return
-    }
-    const { data } = await supabase
-      .from('appointments').select('appointment_time')
-      .eq('doctor_id', doctor.id).eq('appointment_date', selectedDate)
-      .in('status', ['pending', 'confirmed'])
-    setBookedSlots(data?.map((a: any) => a.appointment_time.slice(0, 5)) || [])
+  const validateDoctorFields = () => {
+    if (!fullName.trim()) { toast({ title: 'خطأ', description: 'يرجى إدخال الاسم الكامل', variant: 'destructive' }); return false }
+    if (!specialization) { toast({ title: 'خطأ', description: 'يرجى اختيار التخصص', variant: 'destructive' }); return false }
+    if (!phone.trim() || !validatePhone(phone)) { toast({ title: 'خطأ', description: 'يرجى إدخال رقم هاتف سوري صحيح (09XXXXXXXX)', variant: 'destructive' }); return false }
+    if (!city.trim()) { toast({ title: 'خطأ', description: 'يرجى إدخال المدينة', variant: 'destructive' }); return false }
+    if (!clinicAddress.trim()) { toast({ title: 'خطأ', description: 'يرجى إدخال عنوان العيادة', variant: 'destructive' }); return false }
+    if (!avatarFile) { toast({ title: 'خطأ', description: 'يرجى رفع صورة الملف الشخصي', variant: 'destructive' }); return false }
+    if (!certificateFile) { toast({ title: 'خطأ', description: 'يرجى رفع الشهادة الطبية', variant: 'destructive' }); return false }
+    return true
   }
 
-  const getAvailableDates = () => {
-    if (!doctor) return []
-    const dates: string[] = []
-    const workingDays = doctor.working_days || [0, 1, 2, 3, 4]
-    const today = new Date()
-    for (let i = 1; i <= 14; i++) {
-      const d = new Date(today)
-      d.setDate(today.getDate() + i)
-      if (workingDays.includes(d.getDay())) dates.push(d.toISOString().split('T')[0])
+  const handleSendOTP = () => {
+    if (!isLoginMode && pendingRole === 'doctor') {
+      if (!validateDoctorFields()) return
+    } else if (!isLoginMode && (!phone || !fullName)) {
+      toast({ title: 'خطأ', description: 'يرجى ملء جميع الحقول المطلوبة', variant: 'destructive' }); return
     }
-    return dates
+    if (isLoginMode && !phone) {
+      toast({ title: 'خطأ', description: 'يرجى إدخال رقم الهاتف', variant: 'destructive' }); return
+    }
+    if (!validatePhone(phone)) {
+      toast({ title: 'خطأ', description: 'يرجى إدخال رقم هاتف سوري صحيح (09XXXXXXXX)', variant: 'destructive' }); return
+    }
+    setStep('otp')
   }
 
-  const handleBook = async () => {
-    if (!user || !profile || !selectedDate || !selectedTime) return
+  const uploadFile = async (file: File, bucket: string, path: string) => {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true })
+    if (error) throw error
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+    return data.publicUrl
+  }
+
+  const handleVerifyOTP = async () => {
+    if (otp !== '123456') {
+      toast({ title: 'خطأ', description: 'رمز التحقق غير صحيح', variant: 'destructive' }); return
+    }
+
     setLoading(true)
     try {
-      if (isDemoDoctor(doctor.id)) {
-        // ===== حجز تجريبي =====
-        addDemoBooking({
-          doctorId: doctor.id,
-          doctorName: doctor.full_name,
-          date: selectedDate,
-          time: selectedTime,
-          patientId: user.id,
-          patientName: profile.full_name,
-          patientPhone: profile.phone,
-          status: 'pending',
-        })
-        const remaining = getTimeRemaining(selectedDate, selectedTime)
-        // إشعار للطبيب بالحجز الجديد
-        if (doctor.user_id) {
-          const { error: notifDocErr } = await supabase.from('notifications').insert({
-            user_id: doctor.user_id, title: 'حجز جديد',
-            message: `حجز جديد من ${profile.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}`,
-            type: 'booking',
-          })
-          if (notifDocErr) console.error('doctor notification failed:', notifDocErr.message)
+      const formattedPhone = formatPhone(phone)
+
+      // ---- طبيب جديد يسجل → طلب ينتظر الموافقة ----
+      if (!isLoginMode && pendingRole === 'doctor') {
+        let avatarUrl: string | null = null
+        let certUrl: string | null = null
+        const uniqueId = crypto.randomUUID()
+        if (avatarFile) {
+          const ext = avatarFile.name.split('.').pop()
+          avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${uniqueId}.${ext}`)
         }
-        // إشعار تأكيد الحجز
-        const { error: notifErr1 } = await supabase.from('notifications').insert({
-          user_id: user.id,
-          title: 'تم إرسال طلب الحجز',
-          message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
-          type: 'booking',
+        if (certificateFile) {
+          const ext = certificateFile.name.split('.').pop()
+          certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${uniqueId}.${ext}`)
+        }
+        await supabase.from('doctor_requests').insert({
+          full_name: fullName, specialization, phone: formattedPhone,
+          city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
         })
-        if (notifErr1) console.error('notification insert failed:', notifErr1.message)
-        // إشعار تذكير بالموعد
-        const { error: notifErr2 } = await supabase.from('notifications').insert({
-          user_id: user.id,
-          title: '⏰ تذكير بموعدك',
-          message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
-          type: 'reminder',
-        })
-        if (notifErr2) console.error('notification insert failed:', notifErr2.message)
-        setSuccess(true)
-        toast({ title: 'تم إرسال طلب الحجز!', description: 'في انتظار تأكيد الطبيب' })
+        setStep('doctor-success')
         setLoading(false)
         return
       }
 
-      // ===== حجز حقيقي =====
-      const { error } = await supabase.from('appointments').insert({
-        doctor_id: doctor.id, patient_id: user.id,
-        patient_name: profile.full_name, patient_phone: profile.phone,
-        appointment_date: selectedDate, appointment_time: selectedTime,
-      })
-      if (error) throw error
-      const remaining = getTimeRemaining(selectedDate, selectedTime)
-      if (doctor.user_id) {
-        const { error: notifDocErr } = await supabase.from('notifications').insert({
-          user_id: doctor.user_id, title: 'حجز جديد',
-          message: `حجز جديد من ${profile.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}`,
-          type: 'booking',
+      // ---- مريض جديد يسجل ----
+      if (!isLoginMode && pendingRole === 'patient') {
+        const demo = DEMO_USERS[formattedPhone]
+        if (demo && demo.role === 'patient') {
+          const success = demoLogin(formattedPhone)
+          if (success) {
+            toast({ title: 'مرحباً!', description: `أهلاً بك ${fullName}` })
+            onClose(); resetForm(); return
+          }
+        }
+
+        // حفظ بيانات المريض في قاعدة البيانات
+        const { error: insertError } = await supabase.from('patients').insert({
+          full_name: fullName,
+          phone: formattedPhone,
+          age: parseInt(age),
+          is_university_student: isUniversityStudent === 'yes',
+          has_chronic_disease: hasChronicDisease === 'yes',
+          chronic_diseases: hasChronicDisease === 'yes' ? chronicDiseases.trim() : null,
         })
-        if (notifDocErr) console.error('doctor notification failed:', notifDocErr.message)
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            toast({ title: 'خطأ', description: 'رقم الهاتف مسجل مسبقاً', variant: 'destructive' })
+          } else {
+            toast({ title: 'خطأ', description: insertError.message, variant: 'destructive' })
+          }
+          setLoading(false); return
+        }
+
+        toast({ title: 'تم إنشاء الحساب!', description: `أهلاً بك ${fullName}` })
+        onClose(); resetForm(); return
       }
-      // إشعار تأكيد الحجز
-      const { error: notifErr1 } = await supabase.from('notifications').insert({
-        user_id: user.id, title: 'تم إرسال طلب الحجز',
-        message: `تم إرسال طلب حجزك مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. في انتظار تأكيد الطبيب.`,
-        type: 'booking',
-      })
-      if (notifErr1) console.error('notification insert failed:', notifErr1.message)
-      // إشعار تذكير بالموعد
-      const { error: notifErr2 } = await supabase.from('notifications').insert({
-        user_id: user.id, title: '⏰ تذكير بموعدك',
-        message: `تذكير: لديك موعد مع ${doctor.full_name} بتاريخ ${selectedDate} الساعة ${selectedTime}. الوقت المتبقي: ${remaining}.`,
-        type: 'reminder',
-      })
-      if (notifErr2) console.error('notification insert failed:', notifErr2.message)
-      setSuccess(true)
-      toast({ title: 'تم الحجز بنجاح!' })
+
+      // ---- تسجيل الدخول ----
+      if (isLoginMode) {
+        // أولاً: تحقق هل هو حساب تجريبي → دخول فوري بدون Supabase
+        const demo = DEMO_USERS[formattedPhone]
+        if (demo) {
+          const success = demoLogin(formattedPhone)
+          if (success) {
+            toast({ title: 'مرحباً!', description: `أهلاً بك ${demo.name}` })
+            onClose(); resetForm(); return
+          }
+        }
+
+        // ثانياً: طبيب مقبول من الإدارة
+        const { data: doctorData } = await supabase
+          .from('doctors').select('is_approved, user_id, full_name')
+          .eq('phone', formattedPhone).eq('is_approved', true).single()
+        if (doctorData?.user_id) {
+          const email = `doctor_${formattedPhone.replace('+', '')}@tabibak.local`
+          const { error } = await supabase.auth.signInWithPassword({ email, password: 'Doctor@Tabibak2024!' })
+          if (error) {
+            toast({ title: 'خطأ', description: 'تعذر تسجيل الدخول.', variant: 'destructive' })
+            setLoading(false); return
+          }
+          toast({ title: 'مرحباً!', description: `أهلاً بك ${doctorData.full_name}` })
+          onClose(); resetForm(); return
+        }
+
+        // ثالثاً: تحقق من حالة الطلب
+        const { data: requestData } = await supabase
+          .from('doctor_requests').select('status')
+          .eq('phone', formattedPhone)
+          .order('created_at', { ascending: false }).limit(1).single()
+        if (requestData?.status === 'pending') {
+          toast({ title: 'طلبك قيد المراجعة', description: 'طلبك قيد المراجعة من قبل الإدارة', variant: 'destructive' })
+          setLoading(false); return
+        }
+        if (requestData?.status === 'rejected') {
+          toast({ title: 'تم رفض الطلب', description: 'تم رفض طلبك. يرجى التواصل مع الإدارة.', variant: 'destructive' })
+          setLoading(false); return
+        }
+
+        toast({ title: 'خطأ', description: 'لا يوجد حساب بهذا الرقم', variant: 'destructive' })
+        setLoading(false); return
+      }
+
     } catch (err: any) {
-      toast({ title: 'خطأ', description: err.message, variant: 'destructive' })
+      toast({ title: 'خطأ في التحقق', description: err.message, variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleClose = () => {
-    onClose(); setSuccess(false); setSelectedDate(''); setSelectedTime('')
-    setAvailableSlots([]); setBookedSlots([]); setTimeRemaining('')
+  const resetForm = () => {
+    setStep(getInitialStep()); setPhone(''); setFullName(''); setSpecialization('')
+    setCity(''); setClinicAddress(''); setOtp(''); setIsLoginMode(false)
+    setAvatarFile(null); setCertificateFile(null)
+    setAge(''); setIsUniversityStudent(null); setHasChronicDisease(null); setChronicDiseases('')
   }
 
+  const isDoctorFormValid = fullName.trim() && specialization && phone.trim() && city.trim() && clinicAddress.trim() && avatarFile && certificateFile
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); resetForm() } }}>
       <DialogContent className="max-w-md" dir="rtl">
-        {success ? (
-          <div className="text-center py-8">
-            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="font-heading text-xl font-bold mb-2">تم إرسال طلب الحجز</h3>
-            <p className="font-body text-muted-foreground mb-1">الموعد: {selectedDate} الساعة {selectedTime}</p>
-            {timeRemaining && (
-              <div className="flex items-center justify-center gap-2 mt-3 bg-primary/10 rounded-xl px-4 py-2.5">
-                <AlarmClock className="w-4 h-4 text-primary" />
-                <p className="font-body text-sm text-primary font-semibold">الوقت المتبقي: {timeRemaining}</p>
-              </div>
-            )}
-            <p className="font-body text-sm text-muted-foreground mt-3">ستصلك إشعار عند تأكيد الطبيب</p>
-          </div>
-        ) : (
+
+        {step === 'choose-action' && (
           <>
-            <DialogHeader>
-              <DialogTitle className="font-heading text-xl text-center">حجز موعد - {doctor?.full_name}</DialogTitle>
-            </DialogHeader>
-            {profile && (
-              <div className="bg-accent rounded-xl p-3 mb-2">
-                <p className="font-body text-sm"><strong>الاسم:</strong> {profile.full_name}</p>
-                <p className="font-body text-sm"><strong>الهاتف:</strong> {profile.phone}</p>
-              </div>
-            )}
-            <div className="space-y-4">
-              <div>
-                <label className="font-body text-sm text-muted-foreground mb-2 flex items-center gap-1">
-                  <Calendar className="w-4 h-4" /> اختر التاريخ
-                </label>
-                <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                  {getAvailableDates().map((date) => {
-                    const d = new Date(date)
-                    return (
-                      <button key={date}
-                        onClick={() => { setSelectedDate(date); setSelectedTime('') }}
-                        className={`p-2 rounded-xl text-xs font-body transition-colors ${
-                          selectedDate === date ? 'bg-primary text-primary-foreground' : 'bg-accent hover:bg-primary/10'
-                        }`}>
-                        {dayNames[d.getDay()]}<br />{date.slice(5)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {selectedDate && (
-                <div>
-                  <label className="font-body text-sm text-muted-foreground mb-2 flex items-center gap-1">
-                    <Clock className="w-4 h-4" /> اختر الوقت
-                  </label>
-                  {availableSlots.length === 0 ? (
-                    <p className="font-body text-sm text-muted-foreground text-center py-4">لا توجد مواعيد متاحة لهذا اليوم</p>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-2 max-h-44 overflow-y-auto">
-                      {availableSlots.map((slot) => {
-                        const isBooked = bookedSlots.includes(slot)
-                        return (
-                          <button key={slot} disabled={isBooked}
-                            onClick={() => setSelectedTime(slot)}
-                            className={`p-2 rounded-xl text-sm font-body transition-colors ${
-                              isBooked ? 'bg-destructive/10 text-destructive line-through cursor-not-allowed'
-                                : selectedTime === slot ? 'bg-primary text-primary-foreground'
-                                : 'bg-accent hover:bg-primary/10'
-                            }`}>
-                            {slot}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {selectedDate && selectedTime && timeRemaining && (
-                <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-4 py-2.5">
-                  <AlarmClock className="w-4 h-4 text-primary shrink-0" />
-                  <p className="font-body text-sm text-primary font-semibold">الوقت المتبقي حتى الموعد: {timeRemaining}</p>
-                </div>
-              )}
-
-              <button onClick={handleBook} disabled={loading || !selectedDate || !selectedTime}
-                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
-                {loading ? 'جاري الحجز...' : 'تأكيد الحجز'}
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">مرحباً بك في طبيبك</DialogTitle></DialogHeader>
+            <p className="font-body text-sm text-muted-foreground text-center mb-4">سجل دخولك أو أنشئ حساباً جديداً</p>
+            <div className="space-y-3">
+              <button onClick={() => { setIsLoginMode(true); setStep('login') }} className="w-full premium-card flex items-center gap-3 cursor-pointer hover:border-primary border-2 border-transparent transition-colors">
+                <LogIn className="w-8 h-8 text-primary" />
+                <div className="text-right"><span className="font-heading font-semibold block">تسجيل الدخول</span><span className="font-body text-xs text-muted-foreground">لديك حساب بالفعل</span></div>
+              </button>
+              <button onClick={() => { setIsLoginMode(false); setStep('choose-role') }} className="w-full premium-card flex items-center gap-3 cursor-pointer hover:border-primary border-2 border-transparent transition-colors">
+                <UserPlus className="w-8 h-8 text-primary" />
+                <div className="text-right"><span className="font-heading font-semibold block">إنشاء حساب</span><span className="font-body text-xs text-muted-foreground">حساب جديد كمريض أو طبيب</span></div>
               </button>
             </div>
           </>
         )}
+
+        {step === 'login' && (
+          <>
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">تسجيل الدخول</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">رقم الهاتف</label>
+                <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
+              </div>
+              <button onClick={handleSendOTP} disabled={!phone} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                التالي
+              </button>
+              <button onClick={() => setStep('choose-action')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
+            </div>
+          </>
+        )}
+
+        {step === 'choose-role' && (
+          <>
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">إنشاء حساب</DialogTitle></DialogHeader>
+            <p className="font-body text-sm text-muted-foreground text-center mb-4">اختر نوع الحساب</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => { setPendingRole('patient'); setStep('patient') }} className="premium-card flex flex-col items-center gap-3 p-6 cursor-pointer hover:border-primary border-2 border-transparent">
+                <User className="w-10 h-10 text-primary" /><span className="font-heading font-semibold">مريض</span>
+              </button>
+              <button onClick={() => { setPendingRole('doctor'); setStep('doctor') }} className="premium-card flex flex-col items-center gap-3 p-6 cursor-pointer hover:border-primary border-2 border-transparent">
+                <Stethoscope className="w-10 h-10 text-primary" /><span className="font-heading font-semibold">طبيب</span>
+              </button>
+            </div>
+            <button onClick={() => setStep('choose-action')} className="w-full text-center font-body text-sm text-primary hover:underline mt-3">← رجوع</button>
+          </>
+        )}
+
+        {step === 'patient' && (
+          <>
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">حساب مريض</DialogTitle></DialogHeader>
+            <div className="space-y-4 max-h-[65vh] overflow-y-auto px-1">
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">الاسم الكامل <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="أدخل اسمك الكامل" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">العمر <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="مثال: 25" type="number" min="1" max="120" value={age} onChange={(e) => setAge(e.target.value)} dir="ltr" />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">رقم الهاتف <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-2 block">هل أنت طالب جامعي؟ <span className="text-destructive">*</span></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setIsUniversityStudent('yes')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${isUniversityStudent === 'yes' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    نعم
+                  </button>
+                  <button type="button" onClick={() => setIsUniversityStudent('no')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${isUniversityStudent === 'no' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    لا
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-2 block">هل لديك أمراض مزمنة؟ <span className="text-destructive">*</span></label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button type="button" onClick={() => setHasChronicDisease('yes')} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${hasChronicDisease === 'yes' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    نعم
+                  </button>
+                  <button type="button" onClick={() => { setHasChronicDisease('no'); setChronicDiseases('') }} className={`py-2.5 rounded-xl border-2 font-heading font-semibold text-sm transition-colors ${hasChronicDisease === 'no' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}>
+                    لا
+                  </button>
+                </div>
+                {hasChronicDisease === 'yes' && (
+                  <div className="mt-3">
+                    <textarea
+                      className="premium-input resize-none"
+                      rows={3}
+                      placeholder="اذكر الأمراض المزمنة (مثال: السكري، ضغط الدم...)"
+                      value={chronicDiseases}
+                      onChange={(e) => setChronicDiseases(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSendOTP}
+                disabled={!phone || !fullName || !age || !isUniversityStudent || !hasChronicDisease || (hasChronicDisease === 'yes' && !chronicDiseases.trim())}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                التالي
+              </button>
+              <button onClick={() => setStep('choose-role')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
+            </div>
+          </>
+        )}
+
+        {step === 'doctor' && (
+          <>
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">تسجيل طبيب</DialogTitle></DialogHeader>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">الاسم الكامل <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="د. ..." value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">التخصص <span className="text-destructive">*</span></label>
+                <select className="premium-input" value={specialization} onChange={(e) => setSpecialization(e.target.value)}>
+                  <option value="">اختر التخصص</option>
+                  {specializations.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">رقم الهاتف <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="09XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">المدينة <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="دمشق" value={city} onChange={(e) => setCity(e.target.value)} />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">عنوان العيادة <span className="text-destructive">*</span></label>
+                <input className="premium-input" placeholder="عنوان العيادة" value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} />
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">صورة الملف الشخصي <span className="text-destructive">*</span></label>
+                <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+                <button type="button" onClick={() => avatarInputRef.current?.click()} className="premium-input w-full flex items-center gap-2 cursor-pointer text-right">
+                  {avatarFile ? <><CheckCircle className="w-5 h-5 text-green-600" /><span className="text-sm truncate">{avatarFile.name}</span></> : <><Upload className="w-5 h-5 text-muted-foreground" /><span className="text-muted-foreground text-sm">رفع الصورة</span></>}
+                </button>
+              </div>
+              <div>
+                <label className="font-body text-sm text-muted-foreground mb-1 block">الشهادة الطبية <span className="text-destructive">*</span></label>
+                <input type="file" accept="image/*,.pdf" ref={certInputRef} className="hidden" onChange={(e) => setCertificateFile(e.target.files?.[0] || null)} />
+                <button type="button" onClick={() => certInputRef.current?.click()} className="premium-input w-full flex items-center gap-2 cursor-pointer text-right">
+                  {certificateFile ? <><CheckCircle className="w-5 h-5 text-green-600" /><span className="text-sm truncate">{certificateFile.name}</span></> : <><Upload className="w-5 h-5 text-muted-foreground" /><span className="text-muted-foreground text-sm">رفع الشهادة</span></>}
+                </button>
+              </div>
+              <button onClick={handleSendOTP} disabled={!isDoctorFormValid} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                التالي
+              </button>
+              <button onClick={() => setStep('choose-role')} className="w-full text-center font-body text-sm text-primary hover:underline">← رجوع</button>
+            </div>
+          </>
+        )}
+
+        {step === 'otp' && (
+          <>
+            <DialogHeader><DialogTitle className="font-heading text-xl text-center">رمز التحقق</DialogTitle></DialogHeader>
+            <p className="font-body text-sm text-muted-foreground text-center">أدخل رمز التحقق المرسل إلى هاتفك</p>
+            <div className="space-y-4">
+              <input className="premium-input text-center text-2xl tracking-[0.5em]" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value)} maxLength={6} dir="ltr" />
+              <button onClick={handleVerifyOTP} disabled={loading || otp.length < 6} className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                {loading ? 'جاري التحقق...' : 'تحقق'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'doctor-success' && (
+          <div className="text-center py-8">
+            <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+            <h3 className="font-heading text-xl font-bold mb-3">تم إرسال طلبك بنجاح</h3>
+            <p className="font-body text-muted-foreground leading-relaxed">تم تسجيل طلبك، سنتواصل معك في حال تم قبولك.</p>
+            <button onClick={() => { onClose(); resetForm() }} className="mt-6 px-8 py-3 rounded-xl bg-primary text-primary-foreground font-heading font-semibold hover:bg-primary/90 transition-colors">إغلاق</button>
+          </div>
+        )}
+
       </DialogContent>
     </Dialog>
   )
