@@ -111,6 +111,8 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext)
 
+const DEMO_SESSION_KEY = 'tabibak_demo_phone'
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -152,10 +154,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setDoctorData(demo.doctorData || null)
     setIsDemoSession(true)
     setLoading(false)
+    try { localStorage.setItem(DEMO_SESSION_KEY, phone) } catch {}
     return true
   }
 
   useEffect(() => {
+    // استعادة جلسة الدخول التجريبي بعد تحديث الصفحة (Refresh)
+    try {
+      const savedPhone = localStorage.getItem(DEMO_SESSION_KEY)
+      if (savedPhone && DEMO_USERS[savedPhone]) {
+        demoLogin(savedPhone)
+        return
+      }
+    } catch {}
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (isDemoSession) { setLoading(false); return }
       setSession(session)
@@ -180,6 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     if (isDemoSession) setIsDemoSession(false)
     else await supabase.auth.signOut()
+    try { localStorage.removeItem(DEMO_SESSION_KEY) } catch {}
     setUser(null); setSession(null); setProfile(null)
     setRoles([]); setDoctorData(null)
   }
