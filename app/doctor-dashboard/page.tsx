@@ -11,7 +11,8 @@ import { toast } from '@/hooks/use-toast'
 import { Calendar, Clock, Check, X, Settings, Camera, Plus, Trash2, UserX } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { isDemoDoctor, DEMO_DOCTORS } from '@/lib/demoDoctors'
-import { getDemoBookingsForDoctor, updateDemoBookingStatus, type DemoBooking } from '@/lib/demoBookings'
+import { getDemoBookingsForDoctor, type DemoBooking } from '@/lib/demoBookings'
+import { confirmOrRejectAppointment } from '@/lib/appointmentActions'
 
 const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
@@ -102,45 +103,15 @@ export default function DoctorDashboard() {
     const apt = appointments.find((a) => a.id === id)
     if (!apt) return
 
-    if (apt._isDemo) {
-      // حجز تجريبي - عدّل في الذاكرة
-      updateDemoBookingStatus(id, status)
-      const dateObj = new Date(apt.appointment_date + 'T00:00:00')
-      const dayName = dayNames[dateObj.getDay()]
-      const timeStr = apt.appointment_time?.slice(0, 5)
-      const notifMessage = status === 'confirmed'
-        ? `تم تأكيد حجزك مع ${doctorData?.full_name} - يوم ${dayName} بتاريخ ${apt.appointment_date} الساعة ${timeStr}`
-        : `تم رفض موعدك مع ${doctorData?.full_name} بتاريخ ${apt.appointment_date}`
-      // أرسل إشعار للمريض
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: apt.patient_id,
-        title: status === 'confirmed' ? '✅ تم تأكيد حجزك' : '❌ تم رفض موعدك',
-        message: notifMessage,
-        type: 'booking',
-      })
-      if (notifErr) console.error('patient notification failed:', notifErr.message)
-      toast({ title: status === 'confirmed' ? 'تم تأكيد الموعد' : 'تم رفض الموعد' })
-      fetchAppointments()
+    const result = await confirmOrRejectAppointment({
+      appointmentId: id,
+      isDemo: !!apt._isDemo,
+      status,
+      doctorName: doctorData?.full_name || 'الطبيب',
+    })
+    if (!result.success) {
+      toast({ title: 'خطأ', description: result.error, variant: 'destructive' })
       return
-    }
-
-    const { error } = await supabase.from('appointments').update({ status }).eq('id', id)
-    if (error) { toast({ title: 'خطأ', description: error.message, variant: 'destructive' }); return }
-    const dateObj = new Date(apt.appointment_date + 'T00:00:00')
-    const dayName = dayNames[dateObj.getDay()]
-    const timeStr = apt.appointment_time?.slice(0, 5)
-    const notifMessage = status === 'confirmed'
-      ? `✅ تم تأكيد حجزك مع ${doctorData?.full_name} - يوم ${dayName} بتاريخ ${apt.appointment_date} الساعة ${timeStr}`
-      : `❌ تم رفض موعدك مع ${doctorData?.full_name} بتاريخ ${apt.appointment_date}`
-    // إرسال إشعار للمريض
-    if (apt.patient_id) {
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: apt.patient_id,
-        title: status === 'confirmed' ? '✅ تم تأكيد حجزك' : '❌ تم رفض موعدك',
-        message: notifMessage,
-        type: 'booking',
-      })
-      if (notifErr) console.error('patient notification failed:', notifErr.message)
     }
     toast({ title: status === 'confirmed' ? 'تم تأكيد الموعد' : 'تم رفض الموعد' })
     fetchAppointments()
