@@ -10,8 +10,7 @@ import { supabase } from '@/integrations/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import { Calendar, Clock, Check, X, Settings, Camera, Plus, Trash2, UserX } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { isDemoDoctor, DEMO_DOCTORS } from '@/lib/demoDoctors'
-import { getDemoBookingsForDoctor, type DemoBooking } from '@/lib/demoBookings'
+
 import { confirmOrRejectAppointment } from '@/lib/appointmentActions'
 
 const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
@@ -75,24 +74,6 @@ export default function DoctorDashboard() {
 
   const fetchAppointments = async () => {
     if (!doctorData) return
-
-    if (isDemoDoctor(doctorData.id)) {
-      const demoApts = getDemoBookingsForDoctor(doctorData.id).map((b: DemoBooking) => ({
-        id: b.id,
-        doctor_id: b.doctorId,
-        patient_id: b.patientId,
-        patient_name: b.patientName,
-        patient_phone: b.patientPhone,
-        appointment_date: b.date,
-        appointment_time: b.time,
-        status: b.status,
-        _isDemo: true,
-      }))
-      setAppointments(demoApts)
-      setLoading(false)
-      return
-    }
-
     const { data } = await supabase.from('appointments').select('*')
       .eq('doctor_id', doctorData.id).order('appointment_date', { ascending: true })
     setAppointments(data || [])
@@ -150,10 +131,6 @@ export default function DoctorDashboard() {
 
   const saveSettings = async () => {
     if (!doctorData) return
-    if (isDemoDoctor(doctorData.id)) {
-      toast({ title: 'تم حفظ الإعدادات', description: 'التغييرات محفوظة مؤقتاً (حساب تجريبي)' })
-      return
-    }
     const { error } = await supabase.from('doctors').update({
       bio, city, clinic_address: clinicAddress, specialization,
       working_hours_start: to24h(workStartTime, workStartPeriod),
@@ -172,10 +149,6 @@ export default function DoctorDashboard() {
 
   const fetchSlots = async (day: number) => {
     if (!doctorData) return
-    if (isDemoDoctor(doctorData.id)) {
-      setExistingSlots([])
-      return
-    }
     const { data } = await supabase.from('doctor_slots').select('id, day_of_week, slot_time')
       .eq('doctor_id', doctorData.id).eq('day_of_week', day).order('slot_time')
     setExistingSlots(data || [])
@@ -210,12 +183,6 @@ export default function DoctorDashboard() {
   const saveSlots = async () => {
     if (!doctorData || pendingSlots.length === 0) return
     setSavingSlots(true)
-    if (isDemoDoctor(doctorData.id)) {
-      toast({ title: 'تم حفظ المواعيد', description: 'المواعيد محفوظة مؤقتاً (حساب تجريبي)' })
-      setPendingSlots([])
-      setSavingSlots(false)
-      return
-    }
     const rows = pendingSlots.map(time => ({
       doctor_id: doctorData.id,
       day_of_week: slotDay,
