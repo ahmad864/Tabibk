@@ -103,18 +103,42 @@ export default function AuthModal({ open, onClose, defaultRole, defaultMode }: A
         let avatarUrl: string | null = null
         let certUrl: string | null = null
         const uniqueId = crypto.randomUUID()
-        if (avatarFile) {
-          const ext = avatarFile.name.split('.').pop()
-          avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${uniqueId}.${ext}`)
+        try {
+          if (avatarFile) {
+            const ext = avatarFile.name.split('.').pop()
+            avatarUrl = await uploadFile(avatarFile, 'doctor-images', `requests/${uniqueId}.${ext}`)
+          }
+          if (certificateFile) {
+            const ext = certificateFile.name.split('.').pop()
+            certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${uniqueId}.${ext}`)
+          }
+        } catch (uploadErr: any) {
+          toast({ title: 'تعذر رفع الملفات', description: uploadErr.message || 'تحقق من حجم الصورة والشهادة ونوعها', variant: 'destructive' })
+          setLoading(false)
+          return
         }
-        if (certificateFile) {
-          const ext = certificateFile.name.split('.').pop()
-          certUrl = await uploadFile(certificateFile, 'doctor-certificates', `requests/${uniqueId}.${ext}`)
+
+        const { data: insertedRequest, error: insertError } = await supabase
+          .from('doctor_requests')
+          .insert({
+            full_name: fullName, specialization, phone: formattedPhone,
+            city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          toast({ title: 'تعذر إرسال الطلب', description: insertError.message, variant: 'destructive' })
+          setLoading(false)
+          return
         }
-        await supabase.from('doctor_requests').insert({
-          full_name: fullName, specialization, phone: formattedPhone,
-          city, clinic_address: clinicAddress, avatar_url: avatarUrl, certificate_url: certUrl,
-        })
+
+        if (!insertedRequest) {
+          toast({ title: 'تعذر إرسال الطلب', description: 'لم يتم تسجيل الطلب فعليًا، حاول مرة أخرى', variant: 'destructive' })
+          setLoading(false)
+          return
+        }
+
         setStep('doctor-success')
         setLoading(false)
         return
