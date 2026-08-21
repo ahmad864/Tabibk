@@ -15,6 +15,8 @@ import { confirmOrRejectAppointment } from '@/lib/appointmentActions'
 
 const dayNames = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
 
+const AI_API_URL = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:8000'
+
 export default function DoctorDashboard() {
   const { user, isDoctor, doctorData, loading: authLoading, refreshProfile } = useAuth()
   const router = useRouter()
@@ -28,6 +30,7 @@ export default function DoctorDashboard() {
   const [existingSlots, setExistingSlots] = useState<{ id: string; day_of_week: number; slot_time: string }[]>([])
   const [pendingSlots, setPendingSlots] = useState<string[]>([])
   const [savingSlots, setSavingSlots] = useState(false)
+  const [deletingSlotId, setDeletingSlotId] = useState<string | null>(null)
 
   const [bio, setBio] = useState('')
   const [city, setCity] = useState('')
@@ -41,6 +44,9 @@ export default function DoctorDashboard() {
   const [diseasesTreated, setDiseasesTreated] = useState('')
   const [isActive, setIsActive] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+
+  const [predictingId, setPredictingId] = useState<string | null>(null)
+  const [predictions, setPredictions] = useState<Record<string, { probability: number; will_be_absent: boolean; confidence: string }>>({})
 
   useEffect(() => {
     if (!authLoading && !isDoctor) { router.push('/'); return }
@@ -149,8 +155,12 @@ export default function DoctorDashboard() {
 
   const fetchSlots = async (day: number) => {
     if (!doctorData) return
-    const { data } = await supabase.from('doctor_slots').select('id, day_of_week, slot_time')
+    const { data, error } = await supabase.from('doctor_slots').select('id, day_of_week, slot_time')
       .eq('doctor_id', doctorData.id).eq('day_of_week', day).order('slot_time')
+    if (error) {
+      toast({ title: 'خطأ بجلب المواعيد', description: error.message, variant: 'destructive' })
+      return
+    }
     setExistingSlots(data || [])
   }
 
@@ -174,10 +184,40 @@ export default function DoctorDashboard() {
     setPendingSlots(prev => [...prev, newSlotTime].sort())
   }
 
+  // === تم إصلاحها: الآن تتحقق فعليًا من نجاح الحذف بقاعدة البيانات قبل ما تعرض رسالة النجاح ===
   const deleteExistingSlot = async (slotId: string) => {
-    await supabase.from('doctor_slots').delete().eq('id', slotId)
-    fetchSlots(slotDay)
-    toast({ title: 'تم حذف الموعد' })
+    if (!doctorData) return
+    setDeletingSlotId(slotId)
+    try {
+      const { error, data } = await supabase
+        .from('doctor_slots')
+        .delete()
+        .eq('id', slotId)
+        .eq('doctor_id', doctorData.id) // تأكيد إضافي إن الحذف يخص هذا الطبيب فقط
+        .select()
+
+      if (error) {
+        toast({ title: 'تعذر حذف الموعد', description: error.message, variant: 'destructive' })
+        return
+      }
+
+      if (!data || data.length === 0) {
+        // لم يُحذف أي صف فعليًا (على الأغلب بسبب صلاحيات RLS أو أن الصف لم يعد موجودًا)
+        toast({
+          title: 'تعذر حذف الموعد',
+          description: 'لم يتم العثور على الموعد أو ليست لديك صلاحية حذفه',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // نجاح حقيقي مؤكد: نحدّث القائمة المحلية فورًا + نعيد الجلب من القاعدة للتأكد
+      setExistingSlots((prev) => prev.filter((s) => s.id !== slotId))
+      await fetchSlots(slotDay)
+      toast({ title: 'تم حذف الموعد بنجاح' })
+    } finally {
+      setDeletingSlotId(null)
+    }
   }
 
   const saveSlots = async () => {
@@ -188,13 +228,15 @@ export default function DoctorDashboard() {
       day_of_week: slotDay,
       slot_time: time.length === 5 ? `${time}:00` : time,
     }))
-    const { error } = await supabase.from('doctor_slots').insert(rows)
+    const { error, data } = await supabase.from('doctor_slots').insert(rows).select()
     if (error) {
       toast({ title: 'خطأ', description: error.message, variant: 'destructive' })
+    } else if (!data || data.length === 0) {
+      toast({ title: 'تعذر حفظ المواعيد', description: 'لم تتم إضافة أي موعد فعليًا، تحقق من الصلاحيات', variant: 'destructive' })
     } else {
       toast({ title: 'تم حفظ المواعيد بنجاح' })
       setPendingSlots([])
-      fetchSlots(slotDay)
+      await fetchSlots(slotDay)
     }
     setSavingSlots(false)
   }
@@ -202,20 +244,54 @@ export default function DoctorDashboard() {
   const handlePredictAbsence = async (id: string) => {
     const apt = appointments.find((a) => a.id === id)
     if (!apt) return
+    setPredictingId(id)
 
-    const { error } = await supabase.from('absence_predictions').insert({
-      appointment_id: apt.id,
-      doctor_id: apt.doctor_id,
-      patient_id: apt.patient_id,
-      patient_name: apt.patient_name,
-      appointment_date: apt.appointment_date,
-      appointment_time: apt.appointment_time,
-    })
+    try {
+      const created = new Date(apt.created_at)
+      const aptDate = new Date(apt.appointment_date)
+      const waitingDays = Math.max(0, Math.round((aptDate.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)))
+      const dayOfWeek = aptDate.getDay()
 
-    if (error) {
-      toast({ title: 'خطأ', description: error.message, variant: 'destructive' }); return
+      const res = await fetch(`${AI_API_URL}/predict-absence`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          age: 30,
+          scholarship: 0,
+          sms_received: 1,
+          waiting_days: waitingDays,
+          day_of_week: dayOfWeek,
+          chronic_disease: 0,
+        }),
+      })
+
+      if (!res.ok) throw new Error('AI request failed')
+      const data = await res.json()
+
+      setPredictions((prev) => ({ ...prev, [id]: data }))
+
+      const { error } = await supabase.from('absence_predictions').insert({
+        appointment_id: apt.id,
+        doctor_id: apt.doctor_id,
+        patient_id: apt.patient_id,
+        patient_name: apt.patient_name,
+        appointment_date: apt.appointment_date,
+        appointment_time: apt.appointment_time,
+        probability: data.probability,
+        will_be_absent: data.will_be_absent,
+        confidence: data.confidence,
+      })
+      if (error) console.error(error)
+
+      toast({
+        title: data.will_be_absent ? '⚠️ احتمال غياب مرتفع' : '✅ احتمال حضور',
+        description: `النسبة: ${Math.round(data.probability * 100)}% — الثقة: ${data.confidence}`,
+      })
+    } catch (e) {
+      toast({ title: 'خطأ', description: 'تعذر الاتصال بخدمة التنبؤ، تأكد أن سيرفر الذكاء الاصطناعي يعمل', variant: 'destructive' })
+    } finally {
+      setPredictingId(null)
     }
-    toast({ title: '🔮 تم إرسال طلب التنبؤ', description: 'سيتم تحليل البيانات قريباً' })
   }
 
   const statusBadge = (status: string) => {
@@ -310,10 +386,17 @@ export default function DoctorDashboard() {
                       </div>
                     )}
                     {apt.status === 'confirmed' && (
-                      <button onClick={() => handlePredictAbsence(apt.id)}
-                        className="px-4 py-2 rounded-xl bg-orange-500 text-white font-body text-sm flex items-center gap-1 hover:bg-orange-600 transition-colors">
-                        <UserX className="w-4 h-4" /> تنبأ بالغياب
-                      </button>
+                      <div className="flex flex-col items-end gap-1">
+                        <button onClick={() => handlePredictAbsence(apt.id)} disabled={predictingId === apt.id}
+                          className="px-4 py-2 rounded-xl bg-orange-500 text-white font-body text-sm flex items-center gap-1 hover:bg-orange-600 transition-colors disabled:opacity-50">
+                          <UserX className="w-4 h-4" /> {predictingId === apt.id ? 'جاري التحليل...' : 'تنبأ بالغياب'}
+                        </button>
+                        {predictions[apt.id] && (
+                          <span className={`text-xs font-body ${predictions[apt.id].will_be_absent ? 'text-orange-600' : 'text-green-600'}`}>
+                            احتمال الغياب: {Math.round(predictions[apt.id].probability * 100)}%
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))
@@ -416,7 +499,8 @@ export default function DoctorDashboard() {
                     {existingSlots.map(slot => (
                       <div key={slot.id} className="flex items-center gap-1 bg-green-100 text-green-800 px-3 py-1 rounded-xl text-sm font-body">
                         {slot.slot_time.slice(0, 5)}
-                        <button onClick={() => deleteExistingSlot(slot.id)} className="hover:text-destructive">
+                        <button onClick={() => deleteExistingSlot(slot.id)} disabled={deletingSlotId === slot.id}
+                          className="hover:text-destructive disabled:opacity-50">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
