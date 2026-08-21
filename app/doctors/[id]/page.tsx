@@ -41,7 +41,7 @@ export default function DoctorProfilePage() {
 
   useEffect(() => {
     if (!doctor) return
-    const check = () => setActiveNow(isDoctorActive(doctor.working_hours_start, doctor.working_hours_end, doctor.working_days))
+    const check = () => setActiveNow(isDoctorActive(doctor.is_active))
     check()
     const interval = setInterval(check, 60000)
     return () => clearInterval(interval)
@@ -52,7 +52,7 @@ export default function DoctorProfilePage() {
     const demoDoc = DEMO_DOCTORS.find((d) => d.id === id)
     if (demoDoc) {
       setDoctor(demoDoc)
-      setActiveNow(isDoctorActive(demoDoc.working_hours_start, demoDoc.working_hours_end, demoDoc.working_days))
+      setActiveNow(isDoctorActive(demoDoc.is_active))
       setLoading(false)
       return
     }
@@ -61,7 +61,7 @@ export default function DoctorProfilePage() {
     const { data } = await supabase.from('doctors').select('*').eq('id', id).single()
     setDoctor(data)
     if (data) {
-      setActiveNow(isDoctorActive(data.working_hours_start, data.working_hours_end, data.working_days))
+      setActiveNow(isDoctorActive(data.is_active))
       const { data: revData } = await supabase.from('reviews').select('*').eq('doctor_id', data.id).order('created_at', { ascending: false })
       setReviews(revData || [])
     }
