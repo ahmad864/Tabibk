@@ -40,7 +40,7 @@ export default function DoctorsPage() {
         specialization: d.specialization,
         rating: Number(d.rating) || 0,
         image: localImages[d.full_name] || d.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${d.full_name}&backgroundColor=0055A0&textColor=ffffff`,
-        isActive: isDoctorActive(d.working_hours_start, d.working_hours_end, d.working_days),
+        isActive: isDoctorActive(d.is_active),
         isFeatured: d.is_featured || false,
       }))
     }
