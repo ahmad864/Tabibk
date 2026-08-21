@@ -47,6 +47,7 @@ export default function DoctorDashboard() {
 
   const [predictingId, setPredictingId] = useState<string | null>(null)
   const [predictions, setPredictions] = useState<Record<string, { probability: number; will_be_absent: boolean; confidence: string }>>({})
+  const [togglingActive, setTogglingActive] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !isDoctor) { router.push('/'); return }
@@ -147,6 +148,22 @@ export default function DoctorDashboard() {
     }).eq('id', doctorData.id)
     if (error) { toast({ title: 'خطأ', description: error.message, variant: 'destructive' }) }
     else { toast({ title: 'تم حفظ الإعدادات' }); refreshProfile() }
+  }
+
+  // === زر تفعيل/تعطيل مستقل: يحفظ فورًا بقاعدة البيانات بدون انتظار زر "حفظ الإعدادات" ===
+  const toggleActiveStatus = async () => {
+    if (!doctorData) return
+    const newValue = !isActive
+    setTogglingActive(true)
+    const { error } = await supabase.from('doctors').update({ is_active: newValue }).eq('id', doctorData.id)
+    if (error) {
+      toast({ title: 'تعذر تحديث الحالة', description: error.message, variant: 'destructive' })
+    } else {
+      setIsActive(newValue)
+      toast({ title: newValue ? 'أصبحت نشطًا الآن' : 'أصبحت غير نشط الآن' })
+      refreshProfile()
+    }
+    setTogglingActive(false)
   }
 
   const toggleDay = (day: number) => {
@@ -408,10 +425,11 @@ export default function DoctorDashboard() {
             <div className="premium-card space-y-5">
               <div className="flex items-center gap-3">
                 <label className="font-body text-sm">الحالة:</label>
-                <button onClick={() => setIsActive(!isActive)}
-                  className={`px-4 py-1 rounded-full text-sm font-body transition-colors ${isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {isActive ? 'نشط' : 'غير نشط'}
+                <button onClick={toggleActiveStatus} disabled={togglingActive}
+                  className={`px-4 py-1 rounded-full text-sm font-body transition-colors disabled:opacity-50 ${isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {togglingActive ? '...' : (isActive ? 'نشط' : 'غير نشط')}
                 </button>
+                <span className="font-body text-xs text-muted-foreground">(يُحفظ فورًا ويظهر مباشرة للمريض)</span>
               </div>
               <div>
                 <label className="font-body text-sm text-muted-foreground mb-1 block">التخصص</label>
