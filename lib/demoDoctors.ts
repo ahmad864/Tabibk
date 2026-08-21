@@ -245,7 +245,7 @@ export function getDemoCardData() {
     specialization: d.specialization,
     rating: d.rating,
     image: d.avatar_url,
-    isActive: isDoctorActive(d.working_hours_start, d.working_hours_end, d.working_days),
+    isActive: isDoctorActive(d.is_active),
     isFeatured: d.is_featured,
   }))
 }
@@ -257,7 +257,7 @@ export function getFeaturedCardData() {
     specialization: d.specialization,
     rating: d.rating,
     image: d.avatar_url,
-    isActive: isDoctorActive(d.working_hours_start, d.working_hours_end, d.working_days),
+    isActive: isDoctorActive(d.is_active),
     isFeatured: true,
   }))
 }
